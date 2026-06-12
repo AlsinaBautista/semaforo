@@ -58,11 +58,18 @@ class Canonical17ObservationFunction(DefaultObservationFunction):
 
     Layout (everything clipped to ``[0, 1]``)::
 
-        [queue_N, queue_S, queue_E, queue_W,            # 0-3
-         density_N, density_S, density_E, density_W,    # 4-7
+        [queue_N, queue_E, queue_S, queue_W,            # 0-3
+         density_N, density_E, density_S, density_W,    # 4-7
          phase_0, phase_1, phase_2, phase_3,            # 8-11  (one-hot)
          phase_elapsed_normalised,                      # 12
-         down_N, down_S, down_E, down_W]                # 13-16 (downstream occ)
+         down_N, down_E, down_S, down_W]                # 13-16 (downstream occ)
+
+    Direction bucket order is **[N, E, S, W]**: ``_aggregate_directions``
+    chunks the per-lane arrays in ``ts.lanes`` order, which follows each
+    junction's incLanes order — uniformly [north_in, east, south_in, west]
+    for c0/c1/c2 in corridor.net.xml. Any future inference-side constructor
+    that fills real per-direction data MUST use this exact order or the
+    policy receives a permutation.
 
     The downstream slots keep spillback visible to the policy (the receiving
     block's occupancy is part of the state, so a spillback-aware reward can

@@ -34,6 +34,15 @@ Gotchas:
 - `tests/test_rewards.py` has **known pre-existing failures**; `tests/test_rewards_fixed.py` is the corrected version. Don't treat `test_rewards.py` failures as regressions you caused — check git/diff scope first.
 - SUMO subprocess relaunch on macOS is flaky; `MultiIntersectionEnv` deliberately **recreates** the underlying `SumoEnvironment` each `reset()` rather than reusing it.
 
+### Deploying a retrained policy (post-training checklist)
+
+Training auto-exports to `models/mappo_corridor/policy.onnx`, but the Coordinator reads `brain/models/policy.onnx` — the gap is deliberate (a smoke run must never clobber the deployed model). To deploy:
+1. `PYTHONPATH=brain .venv/bin/python brain/scripts/export_model.py --checkpoint models/mappo_corridor --output brain/models/policy.onnx`
+2. Validate: `.venv/bin/python scripts/verify_brain_inference.py --model brain/models/policy.onnx`
+3. Start the coordinator WITHOUT `ONNX_MODEL_PATH=brain/models/policy_stub.onnx` (retire the pre-retrain stub).
+
+The 17-dim observation's direction bucket order is **[N, E, S, W]** (incLanes order, uniform across c0/c1/c2) — any inference-side constructor filling real per-direction data must match it exactly or the policy receives a permutation.
+
 ## Edge (C++) — commands
 
 C++17, `-Wall -Wextra -Wpedantic -Werror` (warnings are build failures). Dependencies via Conan (`edge/conanfile.txt`) or system packages; `paho.mqtt.cpp` and `nlohmann/json` are pulled by CMake `FetchContent`.

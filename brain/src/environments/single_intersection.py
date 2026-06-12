@@ -293,11 +293,15 @@ class SingleIntersectionEnv(gym.Env):
 
         The output vector layout is::
 
-            [queue_N, queue_S, queue_E, queue_W,            # 0-3
-             density_N, density_S, density_E, density_W,    # 4-7
+            [queue_N, queue_E, queue_S, queue_W,            # 0-3
+             density_N, density_E, density_S, density_W,    # 4-7
              phase_0, phase_1, phase_2, phase_3,            # 8-11  (one-hot)
              phase_elapsed_normalised,                      # 12
-             down_N, down_S, down_E, down_W]                # 13-16 (downstream occ)
+             down_N, down_E, down_S, down_W]                # 13-16 (downstream occ)
+
+        Bucket order is [N, E, S, W] — the per-lane arrays follow the
+        junction's incLanes order (see Canonical17ObservationFunction in
+        multi_intersection.py for the full rationale).
 
         All values are clipped to ``[0, 1]``.
 

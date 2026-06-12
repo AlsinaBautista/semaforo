@@ -55,7 +55,8 @@ def compute_pressure_reward(
         incoming = np.asarray(observation.get(incoming_key, [0.0]), dtype=np.float32)
         outgoing = np.asarray(observation.get(outgoing_key, [0.0]), dtype=np.float32)
     elif isinstance(observation, np.ndarray):
-        # Canonical layout: [queue_N, queue_S, queue_E, queue_W, density_N, ...]
+        # Canonical layout: [queue_N, queue_E, queue_S, queue_W, density_N, ...]
+        # (bucket order [N, E, S, W] = incLanes order; see multi_intersection.py)
         incoming = observation[:4].copy()
         outgoing = observation[4:8].copy()
     else:
