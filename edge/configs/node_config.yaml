@@ -37,6 +37,13 @@ nms_threshold: 0.45
 # Type: "simulation" for development, "gpio" for production hardware
 controller_type: "simulation"
 
+# Corridor main axis for the terminal FLASH degraded mode: the major approach
+# shows FLASHING YELLOW (yield), the crossing approach shows FLASHING RED
+# (stop-and-go). Valid values: "NS" or "EW" (case-insensitive). If missing or
+# invalid, FLASH safely degrades to all-red flash on every approach.
+# Av. Reforma (NS) is the corridor's main axis at int-001.
+major_approach: "NS"
+
 # ── Logging ──────────────────────────────────────────────────────────────────
 # Levels: trace, debug, info, warn, error, critical
 log_level: "info"

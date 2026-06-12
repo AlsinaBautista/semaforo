@@ -125,10 +125,13 @@ if(BUILD_TESTS)
     enable_testing()
     find_package(GTest 1.14 REQUIRED)
 
+    # signal_controller.cpp is compiled in so the F-1 no-double-yellow
+    # invariant is asserted against the REAL phase→lamp mapping, not a copy.
     add_executable(test_safety_layer
         tests/test_safety_layer.cpp
         src/safety_layer.cpp
         src/policy_engine.cpp
+        src/signal_controller.cpp
     )
 
     target_include_directories(test_safety_layer

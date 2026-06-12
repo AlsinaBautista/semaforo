@@ -17,6 +17,7 @@ struct SignalHead {
     bool yellow = false;  ///< Yellow/amber lamp state
     bool green  = false;  ///< Green lamp state
     bool left_arrow = false; ///< Left-turn arrow state
+    bool flashing   = false; ///< Lamps alternate at ~1 Hz (terminal flash mode)
 };
 
 /// @brief Complete signal state for all directions at the intersection.
@@ -84,6 +85,17 @@ public:
     void set_emergency_flash() override;
     bool is_healthy() const override;
     std::chrono::duration<float> elapsed_since_phase_start() const override;
+
+    /// @brief Half-period of the sustained flash (lamp on 500 ms, off 500 ms
+    /// → 60 flashes/min, inside the 50–60 flashes/min field standard).
+    static constexpr std::chrono::milliseconds FLASH_HALF_PERIOD{500};
+
+    /// @brief Pure 1 Hz square wave for flashing heads: whether a flashing
+    /// lamp is lit @p since_phase_start into the flash phase. Exposed (and
+    /// time-parametrised) so the blink cadence is deterministically testable.
+    static bool flash_lamp_lit(std::chrono::milliseconds since_phase_start) {
+        return (since_phase_start / FLASH_HALF_PERIOD) % 2 == 0;
+    }
 
 private:
     SignalState state_;

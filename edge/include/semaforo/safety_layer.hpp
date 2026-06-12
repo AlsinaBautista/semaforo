@@ -12,6 +12,23 @@
 
 namespace semaforo {
 
+/// @brief Which axis is the corridor's principal (major) approach.
+///
+/// Per-intersection configuration consumed by the SafetyLayer's terminal
+/// FLASH mode: the major approach shows flashing yellow (yield), the crossing
+/// minor approach shows flashing red (stop-and-go). ``UNKNOWN`` (missing or
+/// unparsable configuration) is always safe: FLASH degrades to all-red flash.
+enum class MajorApproach {
+    NS,       ///< North-South is the corridor's main axis.
+    EW,       ///< East-West is the corridor's main axis.
+    UNKNOWN,  ///< Not configured / ambiguous → all-red flash fallback.
+};
+
+/// @brief Parse a config string ("NS"/"EW", case-insensitive) into a
+/// MajorApproach. Anything else — empty, garbage, ambiguous — maps to
+/// ``UNKNOWN`` so a bad config can only ever make FLASH *more* restrictive.
+MajorApproach major_approach_from_string(const std::string& s);
+
 /// @brief Result of safety validation: the phase to physically apply *now*.
 struct ValidatedPhase {
     Phase phase;          ///< The phase to actually drive on the signal heads.
@@ -45,6 +62,16 @@ struct ValidatedPhase {
 ///    *forces* a safe transition to the opposing green, independent of the AI,
 ///    so the intersection can never freeze.
 ///
+///  * **F-1 — Terminal FLASH on corrupt schedule.** If the emergency ring's
+///    own timing schedule is untrustworthy (E-5: a green or amber that can
+///    never advance), the layer escalates GREEN/YELLOW → brief ALL_RED
+///    clearance → terminal FLASH: the configured major approach flashes
+///    yellow, the crossing approach flashes red; with no/invalid major
+///    approach, everything flashes red. Two crossing approaches can NEVER
+///    both flash yellow — the flash pattern set is closed (three values) and
+///    statically proven single-yellow. FLASH is terminal: only ``reset()``
+///    (manual intervention) leaves it.
+///
 /// The clock is injectable (the ``now`` overloads) so the entire state machine
 /// is deterministically testable without sleeping.
 ///
@@ -75,14 +102,17 @@ public:
 
     /// @brief Internal sub-phase of the interlock state machine.
     enum class State {
-        GREEN,      ///< A green is displayed (min/max-green apply).
-        YELLOW,     ///< Amber of the outgoing green is displayed.
-        ALL_RED,    ///< All-red clearance is displayed.
-        EMERGENCY,  ///< Deterministic fixed ring is running.
+        GREEN,            ///< A green is displayed (min/max-green apply).
+        YELLOW,           ///< Amber of the outgoing green is displayed.
+        ALL_RED,          ///< All-red clearance is displayed.
+        EMERGENCY,        ///< Deterministic fixed ring is running.
+        FLASH_CLEARANCE,  ///< Brief ALL_RED clearing the box before FLASH.
+        FLASH,            ///< Terminal flash (F-1). Only reset() leaves it.
     };
 
     SafetyLayer();
     explicit SafetyLayer(Timings timings);
+    SafetyLayer(Timings timings, MajorApproach major);
     ~SafetyLayer();
 
     // ── Main entry point ────────────────────────────────────────────────────
@@ -152,18 +182,44 @@ public:
     static Phase opposite_green(Phase green) {
         return is_ns(green) ? Phase::GREEN_EW : Phase::GREEN_NS;
     }
+    /// @brief True if @p p is any terminal flash pattern.
+    static bool is_flash(Phase p) {
+        return p == Phase::FLASH_YELLOW_NS || p == Phase::FLASH_YELLOW_EW ||
+               p == Phase::FLASH_ALL_RED;
+    }
+
+    /// @brief F-1 guard: the flash pattern for a major approach (pure).
+    ///
+    /// This is the ONLY producer of flash phases. The codomain is the closed
+    /// three-pattern set, each of which yellow-flashes at most one axis, so
+    /// two crossing approaches in simultaneous flashing yellow is not a
+    /// representable output (statically asserted in safety_layer.cpp). Any
+    /// value outside the NS/EW enumerators — UNKNOWN, or a corrupted enum —
+    /// falls back to the most restrictive pattern, all-red flash.
+    static Phase flash_phase_for(MajorApproach m) {
+        switch (m) {
+            case MajorApproach::NS: return Phase::FLASH_YELLOW_NS;
+            case MajorApproach::EW: return Phase::FLASH_YELLOW_EW;
+            case MajorApproach::UNKNOWN: return Phase::FLASH_ALL_RED;
+        }
+        return Phase::FLASH_ALL_RED; // out-of-range cast → restrictive fallback
+    }
 
 private:
     // All private helpers assume the caller already holds mtx_.
     ValidatedPhase step_normal(Phase desired, TimePoint now);
     ValidatedPhase step_emergency(TimePoint now);
+    ValidatedPhase step_flash(TimePoint now);
+    void enter_flash_clearance(Phase stuck_phase, TimePoint now);
     void begin_yellow(Phase target_green, TimePoint now);
     float elapsed_s(TimePoint now) const;
     float ring_duration(Phase p) const;
+    float flash_clearance_s() const;
     ValidatedPhase make_result(Phase desired, TimePoint now,
                                std::string reason) const;
 
     Timings t_;
+    MajorApproach major_;  ///< Corridor main axis for the FLASH pattern.
     mutable std::mutex mtx_;
 
     State state_;
@@ -174,6 +230,7 @@ private:
 
     bool emergency_;       ///< Emergency ring engaged.
     std::size_t ring_idx_; ///< Index into the emergency ring.
+    Phase stuck_phase_;    ///< Cause of FLASH: the phase the watchdog caught frozen.
 };
 
 } // namespace semaforo

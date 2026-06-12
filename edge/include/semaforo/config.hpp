@@ -41,6 +41,12 @@ struct NodeConfig {
     // ── Signal controller ───────────────────────────────────────────────
     std::string controller_type = "simulation"; ///< "simulation" or "gpio"
 
+    /// Corridor main axis ("NS" or "EW") for the SafetyLayer's terminal
+    /// FLASH mode: the major approach flashes yellow, the crossing approach
+    /// flashes red. Optional on purpose — missing/invalid values are NOT a
+    /// config error; they degrade FLASH to the safe all-red flash fallback.
+    std::string major_approach;
+
     // ── Hardware dead-man / MMU heartbeat ───────────────────────────────
     bool heartbeat_enabled = false; ///< Drive the cabinet MMU heartbeat GPIO
     int heartbeat_gpio_pin = 17;     ///< sysfs GPIO pin for the dead-man pulse

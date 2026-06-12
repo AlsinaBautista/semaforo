@@ -11,14 +11,23 @@
 namespace semaforo {
 
 /// @brief Traffic signal phase definitions for a standard 4-way intersection.
+///
+/// The FLASH_* values are the *terminal degraded* patterns driven only by the
+/// SafetyLayer (never commandable by the Brain — the command parser's phase
+/// whitelist does not include them, and the policy model's action space stops
+/// at the operational phases). They MUST stay at the end of the enum: the
+/// policy engine maps model action indices onto the leading values.
 enum class Phase {
-    ALL_RED,        ///< All directions red
-    GREEN_NS,       ///< North-South through traffic green
-    YELLOW_NS,      ///< North-South through traffic yellow
-    GREEN_EW,       ///< East-West through traffic green
-    YELLOW_EW,      ///< East-West through traffic yellow
-    GREEN_NS_LEFT,  ///< North-South left-turn protected green
-    GREEN_EW_LEFT,  ///< East-West left-turn protected green
+    ALL_RED,         ///< All directions red
+    GREEN_NS,        ///< North-South through traffic green
+    YELLOW_NS,       ///< North-South through traffic yellow
+    GREEN_EW,        ///< East-West through traffic green
+    YELLOW_EW,       ///< East-West through traffic yellow
+    GREEN_NS_LEFT,   ///< North-South left-turn protected green
+    GREEN_EW_LEFT,   ///< East-West left-turn protected green
+    FLASH_YELLOW_NS, ///< Terminal flash: NS flashing yellow, EW flashing red
+    FLASH_YELLOW_EW, ///< Terminal flash: EW flashing yellow, NS flashing red
+    FLASH_ALL_RED,   ///< Terminal flash fallback: both axes flashing red
 };
 
 /// @brief Convert a Phase enum value to a human-readable string.

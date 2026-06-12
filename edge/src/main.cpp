@@ -126,7 +126,14 @@ int main(int argc, char* argv[]) {
         spdlog::info("Policy engine initialized: {}", config.policy_path);
     }
 
-    semaforo::SafetyLayer safety;
+    // The major approach decides the terminal FLASH pattern (major flashes
+    // yellow, cross flashes red); anything unparsable degrades to all-red flash.
+    const semaforo::MajorApproach major_approach =
+        semaforo::major_approach_from_string(config.major_approach);
+    semaforo::SafetyLayer safety(semaforo::SafetyLayer::Timings{}, major_approach);
+    spdlog::info("SafetyLayer ready (terminal FLASH pattern: {})",
+                 semaforo::phase_to_string(
+                     semaforo::SafetyLayer::flash_phase_for(major_approach)));
 
     // Hardened command ingestion: the parser rejects any malformed/stale/spoofed
     // payload, and the guard decides when the Brain can no longer be trusted and

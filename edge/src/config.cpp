@@ -57,6 +57,10 @@ NodeConfig load_config(const std::string& yaml_path) {
 
     // Signal controller
     if (yaml["controller_type"]) config.controller_type = yaml["controller_type"].as<std::string>();
+    // Optional and deliberately not validated as an error: an absent or
+    // unparsable major_approach must degrade the terminal FLASH mode to the
+    // all-red flash fallback, never abort the node.
+    if (yaml["major_approach"]) config.major_approach = yaml["major_approach"].as<std::string>();
 
     // Hardware dead-man / MMU heartbeat
     if (yaml["heartbeat_enabled"]) config.heartbeat_enabled = yaml["heartbeat_enabled"].as<bool>();

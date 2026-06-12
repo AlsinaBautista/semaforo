@@ -23,9 +23,11 @@
 #include <functional>
 #include <limits>
 #include <random>
+#include <set>
 #include <vector>
 
 #include "semaforo/safety_layer.hpp"
+#include "semaforo/signal_controller.hpp"
 
 using namespace semaforo;
 using TimePoint = SafetyLayer::TimePoint;
@@ -300,16 +302,18 @@ TEST(SafetyLayer, ExitEmergencyReturnsThroughAllRed) {
     EXPECT_EQ(sl.get_state(), SafetyLayer::State::ALL_RED);
 }
 
-// ── E-5: emergency-ring max-green watchdog ──────────────────────────────────
+// ── E-5: emergency-ring schedule watchdog escalates to terminal FLASH ───────
 // A corrupt emergency_green (NaN / infinity / absurdly large) makes the ring's
 // normal self-timed transition unreachable — without a watchdog the green
 // would hold forever, an indefinite freeze in the one mode that must never
-// stall. The watchdog must force ALL_RED before 8001 ms of stuck green, and
-// the ring must keep rotating (anti-starvation) afterwards.
+// stall. The watchdog must force ALL_RED before 8001 ms of stuck green; and
+// because the schedule has now *proven* corrupt, resuming the ring would just
+// re-serve the same frozen green every lap — so after a brief clearance the
+// layer drops to the terminal FLASH pattern instead (F-1).
 TEST(SafetyLayer, EmergencyWatchdogForcesAllRed) {
     SafetyLayer::Timings t = test_timings();
     t.emergency_green = std::numeric_limits<float>::infinity(); // stuck green
-    SafetyLayer sl(t);
+    SafetyLayer sl(t); // no major approach configured → all-red flash fallback
     const TimePoint base = SafetyLayer::Clock::now();
 
     sl.set_emergency_mode(true, base);
@@ -327,17 +331,20 @@ TEST(SafetyLayer, EmergencyWatchdogForcesAllRed) {
     EXPECT_EQ(r.phase, Phase::GREEN_NS);
 
     // …but by 8000 ms (< 8001 ms) the watchdog must have forced ALL_RED,
-    // without leaving emergency mode.
+    // without leaving emergency mode: this is the brief clearance that
+    // precedes terminal FLASH, never a permanent rest state.
     r = sl.validate(Phase::GREEN_NS,
                     green_start + std::chrono::milliseconds(8000));
     EXPECT_EQ(r.phase, Phase::ALL_RED);
     EXPECT_TRUE(sl.in_emergency());
 
-    // Liveness: the forced ALL_RED is the clearance BEFORE the cross green,
-    // so the opposing approach is served next — no starvation in degradation.
+    // After the clearance the layer must NOT resume a ring whose schedule is
+    // corrupt — it lands in the terminal FLASH pattern (all-red flash, since
+    // no major approach is configured) and stays there.
     r = sl.validate(Phase::GREEN_NS,
                     green_start + std::chrono::milliseconds(10000));
-    EXPECT_EQ(r.phase, Phase::GREEN_EW);
+    EXPECT_EQ(r.phase, Phase::FLASH_ALL_RED);
+    EXPECT_EQ(sl.get_state(), SafetyLayer::State::FLASH);
 }
 
 // ── Randomized stress: invariants hold for arbitrary command storms ─────────
@@ -376,6 +383,335 @@ TEST(SafetyLayer, RandomizedCommandStormPreservesInterlock) {
         }
         assert_interlock(tl);
     }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// F-1: terminal FLASH degraded mode
+//
+// When the emergency ring's own schedule proves corrupt (E-5, any leg), the
+// layer must escalate stuck phase → brief ALL_RED clearance → terminal FLASH:
+// the configured major approach flashes yellow, the crossing approach flashes
+// red; with no/invalid major approach everything flashes red. The properties
+// proven here:
+//   * the terminal state is FLASH — never solid all-red, never all-yellow;
+//   * ALL_RED appears only as bounded, transient clearance;
+//   * no reachable state yellow-flashes two crossing approaches (checked
+//     against the REAL phase→lamp mapping in SimulationSignalController);
+//   * FLASH is terminal: requests and emergency toggles cannot leave it,
+//     only an explicit reset() can.
+// ════════════════════════════════════════════════════════════════════════════
+
+namespace {
+
+SafetyLayer::Timings corrupt_green_timings() {
+    SafetyLayer::Timings t = test_timings();
+    t.emergency_green = std::numeric_limits<float>::infinity();
+    return t;
+}
+
+/// Lamp view of a phase through the REAL output mapping. A fresh controller
+/// is used so the 1 Hz modulation (driven by the controller's wall clock) is
+/// still in its initial lit half-cycle: the returned lamps are the commanded
+/// pattern, not a dark blink phase.
+SignalState lamps_for(Phase p) {
+    SimulationSignalController ctrl;
+    ctrl.set_phase(p);
+    return ctrl.get_signal_state();
+}
+
+} // namespace
+
+// Success criterion 1: corrupt green schedule → terminal FLASH with the major
+// approach in flashing yellow and the cross approach in flashing red — NOT
+// solid all-red, NOT all-yellow.
+TEST(SafetyLayerFlash, CorruptGreenScheduleEndsInTerminalFlash) {
+    SafetyLayer sl(corrupt_green_timings(), MajorApproach::NS);
+    const TimePoint base = SafetyLayer::Clock::now();
+    sl.set_emergency_mode(true, base);
+
+    auto desired_fn = [](int) { return Phase::GREEN_NS; };
+    auto segs = run_segments(sl, base, desired_fn, 0.25f, 200); // 50 s horizon
+    auto tl = phases_only(segs);
+
+    // Exact escalation: ring-entry clearance → stuck green → brief clearance
+    // → terminal FLASH. Nothing after FLASH.
+    const std::vector<Phase> expected = {Phase::ALL_RED, Phase::GREEN_NS,
+                                         Phase::ALL_RED,
+                                         Phase::FLASH_YELLOW_NS};
+    EXPECT_EQ(tl, expected);
+
+    EXPECT_EQ(sl.get_state(), SafetyLayer::State::FLASH);
+    EXPECT_EQ(sl.get_current_phase(), Phase::FLASH_YELLOW_NS);
+
+    // The lamp pattern through the real mapping: NS flashing yellow, EW
+    // flashing red — the cross approach is restrictive.
+    const SignalState s = lamps_for(Phase::FLASH_YELLOW_NS);
+    EXPECT_TRUE(s.north_south.yellow);
+    EXPECT_TRUE(s.north_south.flashing);
+    EXPECT_FALSE(s.north_south.red);
+    EXPECT_TRUE(s.east_west.red);
+    EXPECT_TRUE(s.east_west.flashing);
+    EXPECT_FALSE(s.east_west.yellow);
+}
+
+// E-5 amber leg: a corrupt yellow schedule freezes the ring in amber; the
+// kEmergencyYellowSanityTimeoutMs watchdog must escalate it through the same
+// clearance → FLASH path (here with EW as the major approach).
+TEST(SafetyLayerFlash, CorruptYellowScheduleEndsInTerminalFlash) {
+    SafetyLayer::Timings t = test_timings();
+    t.yellow = std::numeric_limits<float>::quiet_NaN(); // stuck amber
+    SafetyLayer sl(t, MajorApproach::EW);
+    const TimePoint base = SafetyLayer::Clock::now();
+    sl.set_emergency_mode(true, base);
+
+    auto desired_fn = [](int) { return Phase::GREEN_NS; };
+    auto segs = run_segments(sl, base, desired_fn, 0.25f, 120); // 30 s horizon
+    auto tl = phases_only(segs);
+
+    // Entry clearance → green (sane 10 s schedule) → stuck amber → brief
+    // clearance → terminal FLASH (EW major → EW flashing yellow).
+    const std::vector<Phase> expected = {Phase::ALL_RED, Phase::GREEN_NS,
+                                         Phase::YELLOW_NS, Phase::ALL_RED,
+                                         Phase::FLASH_YELLOW_EW};
+    EXPECT_EQ(tl, expected);
+    EXPECT_EQ(sl.get_state(), SafetyLayer::State::FLASH);
+}
+
+// E-5 red leg: a corrupt all-red schedule would freeze the ring solid-red at
+// its entry forever — ALL_RED as a permanent rest state. The watchdog must
+// escalate it too, and the pre-FLASH clearance must use the clamped
+// compile-time duration (the configured all_red is the corrupt value).
+TEST(SafetyLayerFlash, CorruptAllRedStillReachesFlash) {
+    SafetyLayer::Timings t = corrupt_green_timings();
+    t.all_red = std::numeric_limits<float>::quiet_NaN(); // stuck ring entry
+    SafetyLayer sl(t, MajorApproach::NS);
+    const TimePoint base = SafetyLayer::Clock::now();
+    sl.set_emergency_mode(true, base);
+
+    // Just under the watchdog ceiling the ring entry is still ALL_RED…
+    auto r = sl.validate(Phase::GREEN_NS, at(base, 7.9f));
+    EXPECT_EQ(r.phase, Phase::ALL_RED);
+    EXPECT_EQ(sl.get_state(), SafetyLayer::State::EMERGENCY);
+
+    // …at 8 s the red leg fires (clearance state, still showing ALL_RED)…
+    r = sl.validate(Phase::GREEN_NS, at(base, 8.0f));
+    EXPECT_EQ(r.phase, Phase::ALL_RED);
+    EXPECT_EQ(sl.get_state(), SafetyLayer::State::FLASH_CLEARANCE);
+
+    // …and 2 s later (the CLAMPED default, not the NaN config) it is FLASH.
+    r = sl.validate(Phase::GREEN_NS, at(base, 10.0f));
+    EXPECT_EQ(r.phase, Phase::FLASH_YELLOW_NS);
+    EXPECT_EQ(sl.get_state(), SafetyLayer::State::FLASH);
+}
+
+// Success criterion 2: no major_approach configured → FLASH falls back to
+// all-red flash (never all-yellow).
+TEST(SafetyLayerFlash, MissingMajorApproachFallsBackToAllRedFlash) {
+    SafetyLayer sl(corrupt_green_timings()); // ctor without a major approach
+    const TimePoint base = SafetyLayer::Clock::now();
+    sl.set_emergency_mode(true, base);
+
+    auto desired_fn = [](int) { return Phase::GREEN_EW; };
+    auto segs = run_segments(sl, base, desired_fn, 0.25f, 200);
+    auto tl = phases_only(segs);
+
+    ASSERT_FALSE(tl.empty());
+    EXPECT_EQ(tl.back(), Phase::FLASH_ALL_RED);
+
+    const SignalState s = lamps_for(Phase::FLASH_ALL_RED);
+    EXPECT_TRUE(s.north_south.red && s.north_south.flashing);
+    EXPECT_TRUE(s.east_west.red && s.east_west.flashing);
+    EXPECT_FALSE(s.north_south.yellow);
+    EXPECT_FALSE(s.east_west.yellow);
+}
+
+// Success criterion 3 (guard): pattern selection is a closed total function —
+// parsing garbage yields UNKNOWN, and ANY value outside the NS/EW enumerators
+// (including a corrupted enum) selects the restrictive all-red flash.
+TEST(SafetyLayerFlash, InvalidMajorApproachHitsGuardFallback) {
+    EXPECT_EQ(major_approach_from_string("NS"), MajorApproach::NS);
+    EXPECT_EQ(major_approach_from_string("ns"), MajorApproach::NS);
+    EXPECT_EQ(major_approach_from_string("Ew"), MajorApproach::EW);
+    EXPECT_EQ(major_approach_from_string("EW"), MajorApproach::EW);
+    EXPECT_EQ(major_approach_from_string(""), MajorApproach::UNKNOWN);
+    EXPECT_EQ(major_approach_from_string("NSEW"), MajorApproach::UNKNOWN);
+    EXPECT_EQ(major_approach_from_string("both"), MajorApproach::UNKNOWN);
+
+    EXPECT_EQ(SafetyLayer::flash_phase_for(MajorApproach::NS),
+              Phase::FLASH_YELLOW_NS);
+    EXPECT_EQ(SafetyLayer::flash_phase_for(MajorApproach::EW),
+              Phase::FLASH_YELLOW_EW);
+    EXPECT_EQ(SafetyLayer::flash_phase_for(MajorApproach::UNKNOWN),
+              Phase::FLASH_ALL_RED);
+    EXPECT_EQ(SafetyLayer::flash_phase_for(static_cast<MajorApproach>(99)),
+              Phase::FLASH_ALL_RED);
+
+    // End to end: a corrupted major approach still ends in all-red flash.
+    SafetyLayer sl(corrupt_green_timings(), static_cast<MajorApproach>(99));
+    const TimePoint base = SafetyLayer::Clock::now();
+    sl.set_emergency_mode(true, base);
+    sl.validate(Phase::GREEN_NS, at(base, 2.0f));   // green served
+    sl.validate(Phase::GREEN_NS, at(base, 10.0f));  // watchdog → clearance
+    auto r = sl.validate(Phase::GREEN_NS, at(base, 12.0f));
+    EXPECT_EQ(r.phase, Phase::FLASH_ALL_RED);
+}
+
+// Success criterion 3 (property): over randomized command storms across sane
+// and corrupt configurations, every applied phase — mapped through the REAL
+// SimulationSignalController lamp table — yellow-lights at most ONE of the two
+// crossing approaches, and any yellow always faces a red.
+TEST(SafetyLayerFlash, NoReachableStateYellowFlashesBothCrossingApproaches) {
+    const Phase greens[] = {Phase::GREEN_NS, Phase::GREEN_EW,
+                            Phase::GREEN_NS_LEFT, Phase::GREEN_EW_LEFT};
+    const MajorApproach majors[] = {MajorApproach::NS, MajorApproach::EW,
+                                    MajorApproach::UNKNOWN,
+                                    static_cast<MajorApproach>(7)};
+
+    std::vector<SafetyLayer::Timings> configs;
+    configs.push_back(test_timings());
+    configs.push_back(corrupt_green_timings());
+    {
+        SafetyLayer::Timings t = test_timings();
+        t.yellow = std::numeric_limits<float>::quiet_NaN();
+        configs.push_back(t);
+    }
+    {
+        SafetyLayer::Timings t = corrupt_green_timings();
+        t.all_red = std::numeric_limits<float>::quiet_NaN();
+        configs.push_back(t);
+    }
+
+    for (const auto& cfg : configs) {
+        for (MajorApproach major : majors) {
+            for (bool emergency : {false, true}) {
+                SafetyLayer sl(cfg, major);
+                const TimePoint base = SafetyLayer::Clock::now();
+                if (emergency) sl.set_emergency_mode(true, base);
+
+                std::mt19937 rng(42u + static_cast<unsigned>(major) * 7u +
+                                 (emergency ? 1u : 0u));
+                std::uniform_int_distribution<int> pick(0, 3);
+                std::uniform_real_distribution<float> jitter(0.2f, 1.4f);
+
+                std::set<Phase> applied;
+                float clock_s = 0.0f;
+                for (int i = 0; i < 1500; ++i) {
+                    clock_s += jitter(rng);
+                    auto r = sl.validate(greens[pick(rng)], at(base, clock_s));
+                    applied.insert(r.phase);
+                }
+
+                for (Phase p : applied) {
+                    const SignalState s = lamps_for(p);
+                    EXPECT_FALSE(s.north_south.yellow && s.east_west.yellow)
+                        << "Crossing approaches simultaneously yellow in "
+                        << phase_to_string(p);
+                    if (s.north_south.yellow) {
+                        EXPECT_TRUE(s.east_west.red)
+                            << "NS yellow without restrictive EW red in "
+                            << phase_to_string(p);
+                    }
+                    if (s.east_west.yellow) {
+                        EXPECT_TRUE(s.north_south.red)
+                            << "EW yellow without restrictive NS red in "
+                            << phase_to_string(p);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Success criterion 4: in the degraded path ALL_RED is only ever a bounded,
+// transient clearance — the rest state is FLASH, never solid all-red.
+TEST(SafetyLayerFlash, AllRedIsOnlyTransientClearanceInDegradedPath) {
+    SafetyLayer sl(corrupt_green_timings(), MajorApproach::NS);
+    const TimePoint base = SafetyLayer::Clock::now();
+    sl.set_emergency_mode(true, base);
+
+    const float dt = 0.25f;
+    const auto t = test_timings();
+    auto desired_fn = [](int) { return Phase::GREEN_NS; };
+    auto segs = run_segments(sl, base, desired_fn, dt, 400); // 100 s horizon
+
+    ASSERT_GE(segs.size(), 2u);
+    // Every ALL_RED hold is a bounded clearance, never a rest state.
+    for (size_t i = 0; i + 1 < segs.size(); ++i) {
+        if (segs[i].phase == Phase::ALL_RED) {
+            EXPECT_LE(segs[i].duration_s, t.all_red + dt + 0.01f)
+                << "ALL_RED held as a rest state at segment " << i;
+        }
+    }
+    // The terminal segment is FLASH and it consumes the rest of the horizon.
+    EXPECT_TRUE(SafetyLayer::is_flash(segs.back().phase));
+    EXPECT_NE(segs.back().phase, Phase::ALL_RED);
+    EXPECT_GE(segs.back().duration_s, 80.0f);
+}
+
+// FLASH is terminal: no request and no emergency toggle leaves it; only an
+// explicit manual reset() restores normal fail-safe boot behaviour.
+TEST(SafetyLayerFlash, FlashIsTerminalUntilManualReset) {
+    SafetyLayer sl(corrupt_green_timings(), MajorApproach::NS);
+    const TimePoint base = SafetyLayer::Clock::now();
+    sl.set_emergency_mode(true, base);
+
+    sl.validate(Phase::GREEN_NS, at(base, 2.0f));   // green served
+    sl.validate(Phase::GREEN_NS, at(base, 10.0f));  // watchdog → clearance
+    auto r = sl.validate(Phase::GREEN_EW, at(base, 12.0f));
+    ASSERT_EQ(r.phase, Phase::FLASH_YELLOW_NS);
+
+    // Hours later, under any request, still FLASH.
+    r = sl.validate(Phase::GREEN_EW, at(base, 3600.0f));
+    EXPECT_EQ(r.phase, Phase::FLASH_YELLOW_NS);
+    EXPECT_EQ(sl.get_state(), SafetyLayer::State::FLASH);
+
+    // Emergency toggles are ignored: a recovered camera/Brain does not
+    // un-corrupt the schedule that put us here.
+    sl.set_emergency_mode(false, at(base, 3601.0f));
+    r = sl.validate(Phase::GREEN_EW, at(base, 3602.0f));
+    EXPECT_EQ(r.phase, Phase::FLASH_YELLOW_NS);
+    sl.set_emergency_mode(true, at(base, 3603.0f));
+    r = sl.validate(Phase::GREEN_EW, at(base, 3604.0f));
+    EXPECT_EQ(r.phase, Phase::FLASH_YELLOW_NS);
+
+    // Manual reset is the only escape, back to the fail-safe boot ALL_RED.
+    sl.reset(at(base, 4000.0f));
+    EXPECT_EQ(sl.get_state(), SafetyLayer::State::ALL_RED);
+    EXPECT_EQ(sl.get_current_phase(), Phase::ALL_RED);
+    EXPECT_FALSE(sl.in_emergency());
+
+    // And normal operation resumes through a fresh clearance.
+    r = sl.validate(Phase::GREEN_NS, at(base, 4003.0f));
+    EXPECT_EQ(r.phase, Phase::GREEN_NS);
+}
+
+// The sustained blink: a 1 Hz square wave (500 ms lit / 500 ms dark), i.e.
+// 60 flashes per minute — inside the standard 50–60 flashes/min band — and
+// it keeps alternating indefinitely (sustained, not a one-shot).
+TEST(SafetyLayerFlash, FlashBlinkIsSustainedOneHertz) {
+    using std::chrono::milliseconds;
+    auto lit = [](long t_ms) {
+        return SimulationSignalController::flash_lamp_lit(milliseconds(t_ms));
+    };
+
+    EXPECT_TRUE(lit(0));
+    EXPECT_TRUE(lit(499));
+    EXPECT_FALSE(lit(500));
+    EXPECT_FALSE(lit(999));
+    EXPECT_TRUE(lit(1000)); // full 1 s period
+
+    // Sustained: exactly 120 edges over one minute → 60 flashes/min.
+    int edges = 0;
+    bool last = lit(0);
+    for (long t_ms = 100; t_ms <= 60'000; t_ms += 100) {
+        const bool now = lit(t_ms);
+        if (now != last) ++edges;
+        last = now;
+    }
+    EXPECT_EQ(edges, 120);
+
+    // And it does not decay: still alternating after an hour.
+    EXPECT_NE(lit(3'600'000), lit(3'600'500));
 }
 
 TEST(SafetyLayer, DeterministicForFixedSeed) {

@@ -22,9 +22,12 @@ const char* phase_to_string(Phase phase) {
         case Phase::YELLOW_NS:      return "YELLOW_NS";
         case Phase::GREEN_EW:       return "GREEN_EW";
         case Phase::YELLOW_EW:      return "YELLOW_EW";
-        case Phase::GREEN_NS_LEFT:  return "GREEN_NS_LEFT";
-        case Phase::GREEN_EW_LEFT:  return "GREEN_EW_LEFT";
-        default:                    return "UNKNOWN";
+        case Phase::GREEN_NS_LEFT:   return "GREEN_NS_LEFT";
+        case Phase::GREEN_EW_LEFT:   return "GREEN_EW_LEFT";
+        case Phase::FLASH_YELLOW_NS: return "FLASH_YELLOW_NS";
+        case Phase::FLASH_YELLOW_EW: return "FLASH_YELLOW_EW";
+        case Phase::FLASH_ALL_RED:   return "FLASH_ALL_RED";
+        default:                     return "UNKNOWN";
     }
 }
 
