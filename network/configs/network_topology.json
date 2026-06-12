@@ -1,0 +1,64 @@
+{
+  "network_id": "net-corrientes-01",
+  "name": "Corredor Av. Corrientes",
+  "version": 2,
+  "intersections": [
+    {
+      "id": "int-001",
+      "name": "Av. Corrientes & Reconquista",
+      "location": {
+        "latitude": -34.60380,
+        "longitude": -58.38450
+      },
+      "num_approaches": 4,
+      "has_signal": true,
+      "zone_id": "zone-centro"
+    },
+    {
+      "id": "int-002",
+      "name": "Av. Corrientes & San Martín",
+      "location": {
+        "latitude": -34.60400,
+        "longitude": -58.38100
+      },
+      "num_approaches": 4,
+      "has_signal": true,
+      "zone_id": "zone-centro"
+    },
+    {
+      "id": "int-003",
+      "name": "Av. Corrientes & Florida",
+      "location": {
+        "latitude": -34.60420,
+        "longitude": -58.37750
+      },
+      "num_approaches": 4,
+      "has_signal": true,
+      "zone_id": "zone-centro"
+    }
+  ],
+  "roads": [
+    {
+      "id": "road-001",
+      "name": "Av. Corrientes tramo 1-2",
+      "source_id": "int-001",
+      "target_id": "int-002",
+      "distance_m": 350.0,
+      "speed_limit_kmh": 50.0,
+      "lanes": 3,
+      "one_way": false,
+      "road_class": "primary"
+    },
+    {
+      "id": "road-002",
+      "name": "Av. Corrientes tramo 2-3",
+      "source_id": "int-002",
+      "target_id": "int-003",
+      "distance_m": 350.0,
+      "speed_limit_kmh": 50.0,
+      "lanes": 3,
+      "one_way": false,
+      "road_class": "primary"
+    }
+  ]
+}

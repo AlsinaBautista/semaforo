@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nodes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/nodes_file.xsd">
+    <node id="west_entry" x="-200.0" y="0.0" type="priority"/>
+    <node id="c0" x="0.0" y="0.0" type="traffic_light"/>
+    <node id="c0_north" x="0.0" y="200.0" type="priority"/>
+    <node id="c0_south" x="0.0" y="-200.0" type="priority"/>
+    <node id="c1" x="350.0" y="0.0" type="traffic_light"/>
+    <node id="c1_north" x="350.0" y="200.0" type="priority"/>
+    <node id="c1_south" x="350.0" y="-200.0" type="priority"/>
+    <node id="c2" x="700.0" y="0.0" type="traffic_light"/>
+    <node id="c2_north" x="700.0" y="200.0" type="priority"/>
+    <node id="c2_south" x="700.0" y="-200.0" type="priority"/>
+    <node id="east_entry" x="900.0" y="0.0" type="priority"/>
+</nodes>

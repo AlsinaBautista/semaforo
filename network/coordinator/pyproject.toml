@@ -1,0 +1,52 @@
+# =============================================================================
+# Semáforo Inteligente — Coordinator Package
+# =============================================================================
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "semaforo-coordinator"
+version = "0.1.0"
+description = "Green wave coordinator for the Semáforo Inteligente traffic system"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Becas Hub"},
+]
+
+dependencies = [
+    "paho-mqtt>=2.0.0",
+    "pyyaml>=6.0",
+    "networkx>=3.0",
+    "numpy>=1.26",
+    "onnxruntime>=1.17",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

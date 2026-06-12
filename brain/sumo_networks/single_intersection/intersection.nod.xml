@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SUMO Nodes file for 4-way, 2-lane intersection -->
+<!-- Semáforo Inteligente Project -->
+<nodes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/nodes_file.xsd">
+
+    <!-- Central junction - traffic light controlled -->
+    <node id="center" x="0.0" y="0.0" type="traffic_light"/>
+
+    <!-- Approach endpoints (200m from center) -->
+    <node id="north" x="0.0"    y="200.0"  type="priority"/>
+    <node id="south" x="0.0"    y="-200.0" type="priority"/>
+    <node id="east"  x="200.0"  y="0.0"    type="priority"/>
+    <node id="west"  x="-200.0" y="0.0"    type="priority"/>
+
+</nodes>

@@ -1,0 +1,94 @@
+// =============================================================================
+// Semáforo Inteligente — Network Graph Schema
+// =============================================================================
+// Defines the network topology for the traffic system: intersections (nodes)
+// and roads (edges) with their physical properties.
+// =============================================================================
+
+syntax = "proto3";
+
+package semaforo;
+
+option java_package = "com.becashub.semaforo.proto";
+option go_package = "github.com/becashub/semaforo/proto";
+
+// GeoPoint represents a geographic coordinate.
+message GeoPoint {
+  // Latitude in decimal degrees
+  double latitude = 1;
+
+  // Longitude in decimal degrees
+  double longitude = 2;
+}
+
+// Intersection represents a traffic intersection node in the network graph.
+message Intersection {
+  // Unique intersection identifier (e.g., "int-001")
+  string id = 1;
+
+  // Human-readable name (e.g., "Av. Principal & Calle 5")
+  string name = 2;
+
+  // Geographic location of the intersection
+  GeoPoint location = 3;
+
+  // Number of approaches (arms) at this intersection
+  uint32 num_approaches = 4;
+
+  // Whether this intersection has a traffic signal
+  bool has_signal = 5;
+
+  // Zone identifier this intersection belongs to
+  string zone_id = 6;
+}
+
+// Road represents a road segment (edge) connecting two intersections.
+message Road {
+  // Unique road segment identifier
+  string id = 1;
+
+  // Human-readable name (e.g., "Av. Principal tramo 1-2")
+  string name = 2;
+
+  // Source intersection identifier
+  string source_id = 3;
+
+  // Destination intersection identifier
+  string target_id = 4;
+
+  // Distance in meters
+  float distance_m = 5;
+
+  // Speed limit in km/h
+  float speed_limit_kmh = 6;
+
+  // Number of lanes in the direction source -> target
+  uint32 lanes = 7;
+
+  // Whether this is a one-way road
+  bool one_way = 8;
+
+  // Road classification: "primary", "secondary", "tertiary", "residential"
+  string road_class = 9;
+}
+
+// NetworkTopology represents the complete traffic network graph.
+message NetworkTopology {
+  // Network identifier
+  string network_id = 1;
+
+  // Human-readable name for this network
+  string name = 2;
+
+  // All intersections in the network
+  repeated Intersection intersections = 3;
+
+  // All road segments in the network
+  repeated Road roads = 4;
+
+  // Version of this topology (for change tracking)
+  uint32 version = 5;
+
+  // Unix timestamp when this topology was last updated
+  uint64 updated_at = 6;
+}

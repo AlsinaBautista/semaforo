@@ -1,0 +1,45 @@
+[Unit]
+Description=Semáforo Inteligente — Edge Node
+Documentation=https://github.com/your-org/semaforo
+After=network-online.target mosquitto.service
+Wants=network-online.target
+# Do not start until the broker is reachable; avoids a flood of reconnect
+# attempts during a full-system boot.
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User=semaforo
+Group=semaforo
+WorkingDirectory=/opt/semaforo
+
+# Positional config arg — Edge binary does NOT accept --config flag.
+ExecStart=/opt/semaforo/bin/semaforo_edge /opt/semaforo/configs/node_config.yaml
+
+# Crash recovery — restart on any non-clean exit (exit code ≠ 0, signal).
+# WatchdogSec is intentionally omitted: sd_notify is not linked in the binary.
+Restart=always
+RestartSec=3
+
+# Limit restart storm; if it fails 5 times in 60 s, systemd stops retrying.
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+# Allow the edge process to write only to its own runtime and log dirs.
+ReadWritePaths=/opt/semaforo/logs /run/semaforo
+
+# Give the process access to the camera device.
+DeviceAllow=/dev/video0 rw
+SupplementaryGroups=video
+
+# Redirect stdout/stderr to journald.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=semaforo-edge
+
+[Install]
+WantedBy=multi-user.target

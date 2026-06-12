@@ -1,0 +1,167 @@
+# =============================================================================
+# Semáforo Inteligente — .gitignore
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.eggs
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+.eggs/
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
+.Python
+develop-eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.manifest
+*.spec
+.installed.cfg
+
+# PyInstaller
+*.spec
+
+# Mypy / type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pytest
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Jupyter
+.ipynb_checkpoints/
+
+# -----------------------------------------------------------------------------
+# C++ / Edge
+# -----------------------------------------------------------------------------
+build/
+cmake-build-*/
+*.o
+*.obj
+*.so
+*.dylib
+*.a
+*.lib
+*.exe
+*.out
+*.app
+
+# TensorRT / ONNX models (large binary files)
+edge/models/*.engine
+edge/models/*.onnx
+edge/models/*.trt
+brain/models/*.onnx
+*.engine
+*.onnx
+
+# Compilation database
+compile_commands.json
+
+# -----------------------------------------------------------------------------
+# Flutter / Dart
+# -----------------------------------------------------------------------------
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.iml
+.metadata
+pubspec.lock
+
+# Generated files
+*.g.dart
+*.freezed.dart
+*.mocks.dart
+
+# -----------------------------------------------------------------------------
+# IDE / Editors
+# -----------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# -----------------------------------------------------------------------------
+# OS
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# -----------------------------------------------------------------------------
+# MQTT / Mosquitto
+# -----------------------------------------------------------------------------
+network/mosquitto/data/
+network/mosquitto/log/
+mosquitto.db
+
+# TLS certificates & private keys — must NEVER enter the repo
+mosquitto/certs/*.key
+mosquitto/certs/*.crt
+network/configs/certs/
+*.key
+*.crt
+*.pem
+
+# -----------------------------------------------------------------------------
+# Docker
+# -----------------------------------------------------------------------------
+docker-volumes/
+*.tar
+
+# -----------------------------------------------------------------------------
+# Environment & Secrets
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# -----------------------------------------------------------------------------
+# Logs
+# -----------------------------------------------------------------------------
+*.log
+logs/
+
+# -----------------------------------------------------------------------------
+# SUMO
+# -----------------------------------------------------------------------------
+*.sumo.cfg.bak
+*_trips.xml
+*_routes.alt.xml
+
+# -----------------------------------------------------------------------------
+# Misc
+# -----------------------------------------------------------------------------
+*.bak
+*.tmp
+*.temp
+.cache/

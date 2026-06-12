@@ -1,0 +1,97 @@
+# Semáforo Inteligente - Edge Node Configuration
+# Intersection: int-001 (Av. Reforma & Calle Juárez)
+
+# ── Node Identity ────────────────────────────────────────────────────────────
+node_id: "edge-001"
+zone: "zona-centro"
+intersection_id: "int-001"
+
+# ── Video Source ─────────────────────────────────────────────────────────────
+# RTSP camera stream for the intersection
+# For development, use a local video file or test pattern:
+#   camera_uri: "/path/to/test_video.mp4"
+#   camera_uri: "test://"
+#   camera_uri: "0"  # USB camera device index
+camera_uri: "0"
+
+# ── ML Models ────────────────────────────────────────────────────────────────
+# Detection model (YOLOv8/v9 exported to ONNX)
+model_path: "edge/models/yolov8n_vehicles.onnx"
+# Policy model (RL agent exported to ONNX)
+policy_path: "edge/models/traffic_policy_v1.onnx"
+
+# ── MQTT Broker ──────────────────────────────────────────────────────────────
+mqtt_broker: "ssl://localhost"
+mqtt_port: 8883
+mqtt_username: ""
+mqtt_password: ""
+mqtt_tls_ca: "network/configs/certs/ca.crt"
+mqtt_tls_cert: "network/configs/certs/edge-001.crt"
+mqtt_tls_key: "network/configs/certs/edge-001.key"
+
+# ── Detection Parameters ────────────────────────────────────────────────────
+conf_threshold: 0.5
+nms_threshold: 0.45
+
+# ── Signal Controller ───────────────────────────────────────────────────────
+# Type: "simulation" for development, "gpio" for production hardware
+controller_type: "simulation"
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Levels: trace, debug, info, warn, error, critical
+log_level: "info"
+
+# ── Telemetry ────────────────────────────────────────────────────────────────
+# How often to publish telemetry to MQTT (in seconds)
+telemetry_interval_s: 1.0
+
+# ── Lane Regions (pixel coordinates for camera at int-001) ──────────────────
+# Each lane is defined by a polygon in the camera's field of view.
+lanes:
+  - lane_id: "NS_lane_1"
+    direction: "NS"
+    polygon:
+      - [320, 100]
+      - [400, 100]
+      - [450, 480]
+      - [270, 480]
+
+  - lane_id: "NS_lane_2"
+    direction: "NS"
+    polygon:
+      - [400, 100]
+      - [480, 100]
+      - [530, 480]
+      - [350, 480]
+
+  - lane_id: "EW_lane_1"
+    direction: "EW"
+    polygon:
+      - [50, 200]
+      - [280, 200]
+      - [280, 280]
+      - [50, 280]
+
+  - lane_id: "EW_lane_2"
+    direction: "EW"
+    polygon:
+      - [360, 200]
+      - [590, 200]
+      - [590, 280]
+      - [360, 280]
+
+  - lane_id: "NS_left_1"
+    direction: "NS_left"
+    polygon:
+      - [240, 100]
+      - [320, 100]
+      - [270, 480]
+      - [190, 480]
+
+  - lane_id: "EW_left_1"
+    direction: "EW_left"
+    polygon:
+      - [50, 280]
+      - [280, 280]
+      - [280, 360]
+      - [50, 360]

@@ -1,0 +1,3 @@
+timestamp,intersection_id,actual_phase,ai_phase,total_queue,simulated_saved_seconds
+1781102789.923518,int-001,EW_GREEN,NS_GREEN,15,30.0
+1781102789.9237099,int-001,NS_GREEN,NS_GREEN,20,0.0

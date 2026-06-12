@@ -1,0 +1,51 @@
+# =============================================================================
+# Mosquitto ACL — Semáforo Inteligente (Production)
+# =============================================================================
+# Topic schema (from network/schemas/topics.yaml):
+#   semaforo/telemetry/<node_id>   Edge → broker   (JSON telemetry)
+#   semaforo/commands/<node_id>    broker → Edge   (JSON phase command)
+#   semaforo/status/<node_id>      Edge → broker   (JSON status / LWT)
+#
+# Mosquitto evaluates rules top-to-bottom, first-match wins.
+# Any topic not explicitly granted is implicitly denied.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Coordinator — full read/write needed to fan out commands and read telemetry
+# -----------------------------------------------------------------------------
+user coordinator
+topic readwrite semaforo/#
+
+# -----------------------------------------------------------------------------
+# Brain (RL agent) — publishes commands, reads telemetry
+# -----------------------------------------------------------------------------
+user brain
+topic write semaforo/commands/#
+topic read  semaforo/telemetry/#
+topic read  semaforo/status/#
+
+# -----------------------------------------------------------------------------
+# Edge nodes — each node identified by its TLS certificate CN (e.g. edge-001).
+# Least-privilege: write own telemetry and status, read own commands only.
+# The wildcard (#) covers the <node_id> suffix; the ACL below applies to
+# every client whose username matches "edge-001" (set by use_identity_as_username).
+# Duplicate this block for each enrolled edge node — do not use a shared cert.
+# -----------------------------------------------------------------------------
+user edge-001
+topic write semaforo/telemetry/#
+topic write semaforo/status/#
+topic read  semaforo/commands/#
+
+# -----------------------------------------------------------------------------
+# Dashboard — read-only monitoring; no publish rights
+# -----------------------------------------------------------------------------
+user dashboard
+topic read semaforo/telemetry/#
+topic read semaforo/status/#
+
+# -----------------------------------------------------------------------------
+# $SYS — deny broker-internal stats to all application users by default.
+# Uncomment and restrict to a dedicated monitoring user if needed.
+# -----------------------------------------------------------------------------
+# user monitoring
+# topic read $SYS/#

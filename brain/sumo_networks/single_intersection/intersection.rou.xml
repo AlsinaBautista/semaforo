@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SUMO Routes file for 4-way, 2-lane intersection -->
+<!-- Semáforo Inteligente Project -->
+<!--
+  Traffic demands (vehicles/hour):
+    NS through: 600   SN through: 500
+    EW through: 400   WE through: 350
+    Left turns:  ~15% of through volume
+    Right turns: ~10% of through volume
+
+  Flow probabilities (veh/s = vehsPerHour / 3600):
+    NS through: 600/3600  = 0.1667
+    NS left:     90/3600  = 0.0250
+    NS right:    60/3600  = 0.0167
+
+    SN through: 500/3600  = 0.1389
+    SN left:     75/3600  = 0.0208
+    SN right:    50/3600  = 0.0139
+
+    EW through: 400/3600  = 0.1111
+    EW left:     60/3600  = 0.0167
+    EW right:    40/3600  = 0.0111
+
+    WE through: 350/3600  = 0.0972
+    WE left:     52/3600  = 0.0144
+    WE right:    35/3600  = 0.0097
+-->
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+
+    <!-- ============================================================ -->
+    <!-- Vehicle Type                                                  -->
+    <!-- ============================================================ -->
+    <vType id="passenger" accel="2.6" decel="4.5" sigma="0.5"
+           length="5.0" minGap="2.5" maxSpeed="13.89"
+           guiShape="passenger"/>
+
+    <!-- ============================================================ -->
+    <!-- Route Definitions: 12 turning movements                       -->
+    <!-- Convention: right-hand traffic                                -->
+    <!--   through = straight across                                   -->
+    <!--   left    = left turn                                         -->
+    <!--   right   = right turn                                        -->
+    <!-- ============================================================ -->
+
+    <!-- North → South (through), North → East (left), North → West (right) -->
+    <route id="ns_through" edges="north_in south_out"/>
+    <route id="ns_left"    edges="north_in east_out"/>
+    <route id="ns_right"   edges="north_in west_out"/>
+
+    <!-- South → North (through), South → West (left), South → East (right) -->
+    <route id="sn_through" edges="south_in north_out"/>
+    <route id="sn_left"    edges="south_in west_out"/>
+    <route id="sn_right"   edges="south_in east_out"/>
+
+    <!-- East → West (through), East → South (left), East → North (right) -->
+    <route id="ew_through" edges="east_in west_out"/>
+    <route id="ew_left"    edges="east_in south_out"/>
+    <route id="ew_right"   edges="east_in north_out"/>
+
+    <!-- West → East (through), West → North (left), West → South (right) -->
+    <route id="we_through" edges="west_in east_out"/>
+    <route id="we_left"    edges="west_in north_out"/>
+    <route id="we_right"   edges="west_in south_out"/>
+
+    <!-- ============================================================ -->
+    <!-- Vehicle Flows (Poisson arrivals via probability attribute)     -->
+    <!-- Simulation period: 0 - 3600 s (1 hour)                       -->
+    <!-- ============================================================ -->
+
+    <!-- North-to-South flows -->
+    <flow id="flow_ns_through" type="passenger" route="ns_through"
+          begin="0" end="3600" probability="0.1667" departLane="best" departSpeed="max"/>
+    <flow id="flow_ns_left"    type="passenger" route="ns_left"
+          begin="0" end="3600" probability="0.0250" departLane="best" departSpeed="max"/>
+    <flow id="flow_ns_right"   type="passenger" route="ns_right"
+          begin="0" end="3600" probability="0.0167" departLane="best" departSpeed="max"/>
+
+    <!-- South-to-North flows -->
+    <flow id="flow_sn_through" type="passenger" route="sn_through"
+          begin="0" end="3600" probability="0.1389" departLane="best" departSpeed="max"/>
+    <flow id="flow_sn_left"    type="passenger" route="sn_left"
+          begin="0" end="3600" probability="0.0208" departLane="best" departSpeed="max"/>
+    <flow id="flow_sn_right"   type="passenger" route="sn_right"
+          begin="0" end="3600" probability="0.0139" departLane="best" departSpeed="max"/>
+
+    <!-- East-to-West flows -->
+    <flow id="flow_ew_through" type="passenger" route="ew_through"
+          begin="0" end="3600" probability="0.1111" departLane="best" departSpeed="max"/>
+    <flow id="flow_ew_left"    type="passenger" route="ew_left"
+          begin="0" end="3600" probability="0.0167" departLane="best" departSpeed="max"/>
+    <flow id="flow_ew_right"   type="passenger" route="ew_right"
+          begin="0" end="3600" probability="0.0111" departLane="best" departSpeed="max"/>
+
+    <!-- West-to-East flows -->
+    <flow id="flow_we_through" type="passenger" route="we_through"
+          begin="0" end="3600" probability="0.0972" departLane="best" departSpeed="max"/>
+    <flow id="flow_we_left"    type="passenger" route="we_left"
+          begin="0" end="3600" probability="0.0144" departLane="best" departSpeed="max"/>
+    <flow id="flow_we_right"   type="passenger" route="we_right"
+          begin="0" end="3600" probability="0.0097" departLane="best" departSpeed="max"/>
+
+</routes>

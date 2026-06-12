@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SUMO Edges file for 4-way, 2-lane intersection -->
+<!-- Semáforo Inteligente Project -->
+<!-- 8 edges: inbound and outbound for each cardinal direction -->
+<!-- All edges: 2 lanes, speed 13.89 m/s (50 km/h) -->
+<edges xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/edges_file.xsd">
+
+    <!-- North approach -->
+    <edge id="north_in"  from="north"  to="center" numLanes="2" speed="13.89"/>
+    <edge id="north_out" from="center" to="north"  numLanes="2" speed="13.89"/>
+
+    <!-- South approach -->
+    <edge id="south_in"  from="south"  to="center" numLanes="2" speed="13.89"/>
+    <edge id="south_out" from="center" to="south"  numLanes="2" speed="13.89"/>
+
+    <!-- East approach -->
+    <edge id="east_in"   from="east"   to="center" numLanes="2" speed="13.89"/>
+    <edge id="east_out"  from="center" to="east"   numLanes="2" speed="13.89"/>
+
+    <!-- West approach -->
+    <edge id="west_in"   from="west"   to="center" numLanes="2" speed="13.89"/>
+    <edge id="west_out"  from="center" to="west"   numLanes="2" speed="13.89"/>
+
+</edges>

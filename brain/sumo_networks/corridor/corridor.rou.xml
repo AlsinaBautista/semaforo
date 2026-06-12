@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<routes>
+
+    <vType id="car" accel="2.6" decel="4.5" sigma="0.5" length="5.0" minGap="2.5" maxSpeed="13.89" guiShape="passenger"/>
+    <vType id="bus" accel="1.5" decel="3.5" sigma="0.5" length="12.0" minGap="3.0" maxSpeed="11.11" guiShape="bus" color="0,128,255"/>
+
+    <route id="ew_through" edges="west_entry_to_c0 c0_to_c1 c1_to_c2 c2_to_east_entry"/>
+    <route id="we_through" edges="east_entry_to_c2 c2_to_c1 c1_to_c0 c0_to_west_entry"/>
+
+    <route id="ns_c0" edges="c0_north_in c0_south_out"/>
+    <route id="sn_c0" edges="c0_south_in c0_north_out"/>
+    <route id="ns_c1" edges="c1_north_in c1_south_out"/>
+    <route id="sn_c1" edges="c1_south_in c1_north_out"/>
+    <route id="ns_c2" edges="c2_north_in c2_south_out"/>
+    <route id="sn_c2" edges="c2_south_in c2_north_out"/>
+
+    <route id="w_to_c1n" edges="west_entry_to_c0 c0_to_c1 c1_north_out"/>
+    <route id="c0s_to_e" edges="c0_south_in c0_to_c1 c1_to_c2 c2_to_east_entry"/>
+
+    <flow id="flow_ew" type="car" route="ew_through" begin="0" end="3600.0" probability="0.3333" departLane="best" departSpeed="max"/>
+    <flow id="flow_we" type="car" route="we_through" begin="0" end="3600.0" probability="0.3333" departLane="best" departSpeed="max"/>
+
+    <flow id="flow_ns_c0" type="car" route="ns_c0" begin="0" end="3600.0" probability="0.0833" departLane="best" departSpeed="max"/>
+    <flow id="flow_sn_c0" type="car" route="sn_c0" begin="0" end="3600.0" probability="0.0833" departLane="best" departSpeed="max"/>
+    <flow id="flow_ns_c1" type="car" route="ns_c1" begin="0" end="3600.0" probability="0.0833" departLane="best" departSpeed="max"/>
+    <flow id="flow_sn_c1" type="car" route="sn_c1" begin="0" end="3600.0" probability="0.0833" departLane="best" departSpeed="max"/>
+    <flow id="flow_ns_c2" type="car" route="ns_c2" begin="0" end="3600.0" probability="0.0833" departLane="best" departSpeed="max"/>
+    <flow id="flow_sn_c2" type="car" route="sn_c2" begin="0" end="3600.0" probability="0.0833" departLane="best" departSpeed="max"/>
+
+    <flow id="flow_bus_ew" type="bus" route="ew_through" begin="0" end="3600.0" probability="0.0167" departLane="best" departSpeed="max"/>
+    <flow id="flow_bus_we" type="bus" route="we_through" begin="0" end="3600.0" probability="0.0167" departLane="best" departSpeed="max"/>
+
+    <flow id="flow_w_c1n" type="car" route="w_to_c1n" begin="0" end="3600.0" probability="0.02" departLane="best" departSpeed="max"/>
+    <flow id="flow_c0s_e" type="car" route="c0s_to_e" begin="0" end="3600.0" probability="0.02" departLane="best" departSpeed="max"/>
+
+</routes>

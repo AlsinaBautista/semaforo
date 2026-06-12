@@ -1,0 +1,85 @@
+// =============================================================================
+// Semáforo Inteligente — Timing Plan Schema
+// =============================================================================
+// Defines coordinated timing plans for green wave corridors.
+// Topic: semaforo/{zone}/timing/plan
+// =============================================================================
+
+syntax = "proto3";
+
+package semaforo;
+
+option java_package = "com.becashub.semaforo.proto";
+option go_package = "github.com/becashub/semaforo/proto";
+
+// PhaseDefinition represents a single phase within a timing cycle.
+message PhaseDefinition {
+  // Phase identifier (e.g., "NS_GREEN")
+  string phase_id = 1;
+
+  // Duration of the phase in seconds
+  uint32 duration_s = 2;
+
+  // Minimum allowed duration in seconds
+  uint32 min_duration_s = 3;
+
+  // Maximum allowed duration in seconds
+  uint32 max_duration_s = 4;
+}
+
+// IntersectionOffset defines the timing offset for a specific intersection
+// within a coordinated corridor to achieve green wave progression.
+message IntersectionOffset {
+  // Intersection identifier (e.g., "int-001")
+  string intersection_id = 1;
+
+  // Offset in seconds from the corridor cycle start
+  uint32 offset_s = 2;
+
+  // Cycle length in seconds for this intersection
+  uint32 cycle_length_s = 3;
+
+  // Ordered list of phase definitions for this intersection
+  repeated PhaseDefinition phases = 4;
+}
+
+// Corridor represents a coordinated sequence of intersections
+// along a primary traffic route.
+message Corridor {
+  // Unique corridor identifier (e.g., "corridor-av-principal")
+  string corridor_id = 1;
+
+  // Human-readable name for the corridor
+  string name = 2;
+
+  // Design speed for progression in km/h
+  float design_speed_kmh = 3;
+
+  // Ordered list of intersection offsets along the corridor
+  repeated IntersectionOffset intersections = 4;
+}
+
+// TimingPlan is the top-level message representing a complete
+// coordinated timing plan for a zone or network segment.
+message TimingPlan {
+  // Unique plan identifier
+  string plan_id = 1;
+
+  // Unix timestamp in milliseconds when the plan was generated
+  uint64 timestamp = 2;
+
+  // Zone or area this plan applies to
+  string zone_id = 3;
+
+  // Overall cycle length in seconds
+  uint32 cycle_length_s = 4;
+
+  // List of corridors in this plan
+  repeated Corridor corridors = 5;
+
+  // Plan validity duration in seconds (0 = indefinite)
+  uint32 valid_for_s = 6;
+
+  // Source of the plan: "coordinator", "manual", "rl_agent"
+  string source = 7;
+}

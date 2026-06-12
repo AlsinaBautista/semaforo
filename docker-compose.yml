@@ -1,0 +1,71 @@
+# =============================================================================
+# Semáforo Inteligente — Docker Compose
+# =============================================================================
+# Orquestación de servicios para desarrollo y despliegue.
+# Uso: docker compose up -d
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Mosquitto MQTT Broker
+  # ---------------------------------------------------------------------------
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: semaforo-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"     # MQTT Local
+      - "8883:8883"     # MQTT TLS
+      - "9001:9001"     # WebSocket
+    volumes:
+      - ./network/configs/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./network/configs/mosquitto.acl:/mosquitto/config/mosquitto.acl:ro
+      - ./network/configs/certs:/network/configs/certs:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    networks:
+      - semaforo-net
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -t '$$SYS/#' -C 1 -W 3 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Green Wave Coordinator
+  # ---------------------------------------------------------------------------
+  coordinator:
+    build:
+      context: ./network/coordinator
+      dockerfile: Dockerfile
+    container_name: semaforo-coordinator
+    restart: unless-stopped
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - TOPOLOGY_FILE=/app/configs/network_topology.json
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./network/configs:/app/configs:ro
+    networks:
+      - semaforo-net
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  mosquitto-data:
+    driver: local
+  mosquitto-log:
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  semaforo-net:
+    driver: bridge
+    name: semaforo-net

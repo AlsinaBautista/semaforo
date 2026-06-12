@@ -1,0 +1,41 @@
+{
+  "green_wave": {
+    "steps": 3770,
+    "vehicles_arrived": 4466,
+    "avg_queue": 32.897,
+    "per_tl": {
+      "c0": {
+        "avg_queue": 37.479,
+        "avg_halting": 15.85
+      },
+      "c1": {
+        "avg_queue": 35.998,
+        "avg_halting": 11.227
+      },
+      "c2": {
+        "avg_queue": 25.212,
+        "avg_halting": 6.895
+      }
+    }
+  },
+  "fixed": {
+    "steps": 3767,
+    "vehicles_arrived": 4466,
+    "avg_queue": 35.214,
+    "per_tl": {
+      "c0": {
+        "avg_queue": 32.097,
+        "avg_halting": 12.207
+      },
+      "c1": {
+        "avg_queue": 41.266,
+        "avg_halting": 16.676
+      },
+      "c2": {
+        "avg_queue": 32.28,
+        "avg_halting": 12.881
+      }
+    }
+  },
+  "improvement_pct": 6.58
+}

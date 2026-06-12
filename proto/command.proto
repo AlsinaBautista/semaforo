@@ -1,0 +1,35 @@
+// =============================================================================
+// Semáforo Inteligente — Command Schema
+// =============================================================================
+// Defines commands sent to intersection controllers.
+// Topic: semaforo/{intersection_id}/command
+// =============================================================================
+
+syntax = "proto3";
+
+package semaforo;
+
+option java_package = "com.becashub.semaforo.proto";
+option go_package = "github.com/becashub/semaforo/proto";
+
+// PhaseCommand represents a control command sent to an intersection controller.
+// Commands can originate from the RL brain, the coordinator, or manual override.
+message PhaseCommand {
+  // Unix timestamp in milliseconds when the command was issued
+  uint64 timestamp = 1;
+
+  // Action to perform: "set_phase", "extend_phase", "skip_phase", "override"
+  string action = 2;
+
+  // Target phase (e.g., "NS_GREEN", "EW_GREEN", "ALL_RED")
+  string phase = 3;
+
+  // Duration for the phase in seconds
+  uint32 duration_s = 4;
+
+  // Priority level: "normal", "high", "emergency"
+  string priority = 5;
+
+  // Identifier of the timing plan this command belongs to (if any)
+  string plan_id = 6;
+}

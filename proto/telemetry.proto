@@ -1,0 +1,54 @@
+// =============================================================================
+// Semáforo Inteligente — Telemetry Schema
+// =============================================================================
+// Defines the telemetry data published by each intersection.
+// Topic: semaforo/{intersection_id}/telemetry
+// =============================================================================
+
+syntax = "proto3";
+
+package semaforo;
+
+option java_package = "com.becashub.semaforo.proto";
+option go_package = "github.com/becashub/semaforo/proto";
+
+// QueueState represents the state of a vehicle queue at a specific approach.
+message QueueState {
+  // Number of vehicles currently queued
+  uint32 count = 1;
+
+  // Density of vehicles (vehicles per meter)
+  float density = 2;
+
+  // Average waiting time in seconds for queued vehicles
+  float avg_wait_s = 3;
+}
+
+// Telemetry is the primary data message published by each intersection.
+// It contains the current state of the intersection including phase info,
+// queue states per approach, and aggregate traffic metrics.
+message Telemetry {
+  // Unix timestamp in milliseconds
+  uint64 timestamp = 1;
+
+  // Unique identifier for the intersection (e.g., "int-001")
+  string intersection_id = 2;
+
+  // Current traffic signal phase (e.g., "NS_GREEN", "EW_GREEN")
+  string phase = 3;
+
+  // Elapsed time in seconds since the current phase began
+  uint32 phase_elapsed_s = 4;
+
+  // Queue state per approach direction (e.g., "north", "south", "east", "west")
+  map<string, QueueState> queues = 5;
+
+  // Current flow rate (vehicles per second through the intersection)
+  float flow_rate = 6;
+
+  // Total vehicle count detected in the intersection area
+  uint32 vehicle_count = 7;
+
+  // Total pedestrian count detected in the intersection area
+  uint32 pedestrian_count = 8;
+}

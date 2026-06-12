@@ -1,0 +1,94 @@
+# =============================================================================
+# Semáforo Inteligente — MQTT Topic Contract (single source of truth)
+# =============================================================================
+# Canonical namespace: semaforo/<channel>/<node_id>  (the Edge C++ side is the
+# deployed reference; everything else conforms to it).
+#
+# Consumers:
+#   - network/coordinator/src/coordinator.py loads this file at startup and
+#     refuses to start without it (no hardcoded topic fallbacks).
+#   - scripts/verify_contract.py validates emitted payloads against the
+#     constraints declared here.
+#   - edge/src/mqtt_client.cpp and edge/include/semaforo/command_parser.hpp
+#     are the C++ counterparts; keep them in sync when editing this file.
+
+version: 1
+namespace: semaforo
+
+channels:
+  telemetry:
+    pattern: "semaforo/telemetry/{node_id}"
+    subscribe: "semaforo/telemetry/+"
+    publisher: edge
+    subscribers: [coordinator]
+    format: json
+    qos: 1
+    payload:
+      # Fields serialized by EdgeMqttClient::telemetry_to_json (mqtt_client.cpp).
+      # flow_rate is NOT emitted by the Edge today; consumers must tolerate
+      # its absence.
+      fields: [node_id, intersection_id, phase, total_vehicles, max_density,
+               max_wait_s, uptime_s, fps, lanes]
+
+  commands:
+    pattern: "semaforo/commands/{node_id}"
+    publisher: coordinator
+    subscribers: [edge]
+    format: json
+    qos: 1
+    payload:
+      # Validated by the Edge CommandParser (command_parser.hpp); a payload
+      # violating any constraint below is rejected before reaching the
+      # SafetyLayer.
+      required: [action, phase, timestamp]
+      optional: [priority, sequence_number]
+      allowed_actions: [CHANGE_PHASE]
+      allowed_phases: [GREEN_NS, YELLOW_NS, ALL_RED, GREEN_EW, YELLOW_EW,
+                       GREEN_NS_LEFT, GREEN_EW_LEFT]
+      constraints:
+        timestamp_unit: ms_epoch
+        max_age_ms: 2000
+        max_future_skew_ms: 1000
+        max_payload_bytes: 8192
+        sequence_number: strictly_increasing_integer
+
+  status:
+    pattern: "semaforo/status/{node_id}"
+    publisher: edge
+    subscribers: [coordinator]
+    format: json
+    qos: 1
+    retained: true
+
+  # ---------------------------------------------------------------------------
+  # Legacy zone-first namespace — documented as-is, not changed in code.
+  # ---------------------------------------------------------------------------
+  timing:
+    pattern: "semaforo/{zone_id}/timing/plan"
+    publisher: coordinator
+    format: json
+    qos: 1
+    retained: true
+
+  sync:
+    pattern: "semaforo/{zone_id}/sync/pulse"
+    publisher: coordinator
+    format: json
+    qos: 0
+
+  emergency:
+    pattern: "semaforo/{intersection_id}/emergency"
+    subscribe: "semaforo/+/emergency"
+    subscribers: [coordinator]
+    format: json
+    note: >-
+      KNOWN DIVERGENCE: emergency.py publishes overrides to
+      semaforo/{intersection_id}/command, a topic the Edge does NOT subscribe
+      to (it only listens on semaforo/commands/{node_id}). Emergency overrides
+      therefore never reach the Edge today. Fix tracked separately.
+
+  audit:
+    pattern: "semaforo/audit/{intersection_id}"
+    publisher: brain
+    format: json
+    qos: 0
