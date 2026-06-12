@@ -112,6 +112,16 @@ static_assert(flash_patterns_are_single_yellow(),
               "approaches in flashing yellow — at least one axis must stay "
               "restrictive (red).");
 
+/// @brief Shared trust predicate for any timing schedule (normal interlock
+/// and emergency ring alike): sane, finite, and bounded by the system-wide
+/// green ceiling. A value failing this check can make a self-timed
+/// ``elapsed >= schedule`` transition unreachable — the freeze precursor
+/// every corruption guard in this file exists to catch.
+bool schedule_trusted(float sched) {
+    return std::isfinite(sched) && sched >= 0.0f &&
+           sched <= SafetyLayer::MAX_GREEN_S;
+}
+
 const char* major_approach_to_string(MajorApproach m) {
     switch (m) {
         case MajorApproach::NS: return "NS";
@@ -285,6 +295,18 @@ ValidatedPhase SafetyLayer::step_normal(Phase desired, TimePoint now) {
 
     switch (state_) {
         case State::GREEN: {
+            // ── Corruption guard (normal-mode F-1 leg): if max_green is
+            // untrustworthy the A-1 watchdog below can never fire, so a green
+            // could be held forever. A green past the system-wide MAX_GREEN_S
+            // ceiling with a corrupt ceiling of its own has proven the
+            // schedule broken — escalate through the F-1 pipeline. (A corrupt
+            // min_green alone needs no guard: a sane max_green still bounds
+            // the green via A-1.)
+            if (!schedule_trusted(t_.max_green) && el >= MAX_GREEN_S) {
+                enter_flash_clearance(applied_, now, "normal interlock");
+                return step_flash(now);
+            }
+
             // Non-green desires are ignored (the AI may never command amber/red).
             const Phase want = is_green(desired) ? desired : applied_;
             const bool wants_change = (want != applied_);
@@ -313,6 +335,16 @@ ValidatedPhase SafetyLayer::step_normal(Phase desired, TimePoint now) {
         }
 
         case State::YELLOW: {
+            // ── Corruption guard (normal-mode F-1 leg): a corrupt yellow
+            // schedule makes the advance below unreachable — a frozen amber,
+            // forever. Same timeout as the ring's amber leg.
+            if (!schedule_trusted(t_.yellow) &&
+                el * 1000.0f >=
+                    static_cast<float>(kEmergencyYellowSanityTimeoutMs)) {
+                enter_flash_clearance(applied_, now, "normal interlock");
+                return step_flash(now);
+            }
+
             // The destination is LOCKED once a transition has begun. We must not
             // retarget here: doing so would let a constant request cancel a
             // max-green forced switch (defeating A-1) and could ping-pong the
@@ -328,6 +360,17 @@ ValidatedPhase SafetyLayer::step_normal(Phase desired, TimePoint now) {
         }
 
         case State::ALL_RED: {
+            // ── Corruption guard (normal-mode F-1 leg): a corrupt all-red
+            // schedule can never complete a clearance, so no green could ever
+            // be served again — ALL_RED as a permanent rest state. Escalate;
+            // the pre-FLASH clearance clamps to the compile-time default.
+            if (!schedule_trusted(t_.all_red) &&
+                el * 1000.0f >=
+                    static_cast<float>(kEmergencyScheduleSanityTimeoutMs)) {
+                enter_flash_clearance(applied_, now, "normal interlock");
+                return step_flash(now);
+            }
+
             // Only accept a target when none is committed yet (boot ALL_RED). A
             // clearance that follows a committed transition keeps its locked
             // target so forced/normal switches always complete.
@@ -371,11 +414,9 @@ ValidatedPhase SafetyLayer::step_emergency(TimePoint now) {
     const float el = elapsed_s(now);
     const float sched = ring_duration(current);
 
-    // A schedule is only trusted when it is a sane, finite duration bounded by
-    // the system-wide green ceiling. A corrupt value (NaN/inf/absurd) makes the
-    // `el >= sched` advance below unreachable, which would freeze the ring.
-    const bool sched_trusted =
-        std::isfinite(sched) && sched >= 0.0f && sched <= MAX_GREEN_S;
+    // A corrupt schedule (NaN/inf/absurd) makes the `el >= sched` advance
+    // below unreachable, which would freeze the ring.
+    const bool sched_trusted = schedule_trusted(sched);
 
     if (el >= sched) {
         ring_idx_ = (ring_idx_ + 1) % kRingSize;
@@ -393,7 +434,7 @@ ValidatedPhase SafetyLayer::step_emergency(TimePoint now) {
         // so resuming the ring would just re-serve this frozen green every
         // lap: escalate F-1 instead — brief all-red clearance, then terminal
         // FLASH. No dynamic allocation on this path.
-        enter_flash_clearance(current, now);
+        enter_flash_clearance(current, now, "emergency ring");
         return step_flash(now);
     } else if (!sched_trusted && is_yellow(current) &&
                el * 1000.0f >=
@@ -401,7 +442,7 @@ ValidatedPhase SafetyLayer::step_emergency(TimePoint now) {
         // ── E-5 (amber leg): stuck-amber watchdog, same escalation ──────────
         // A corrupt yellow schedule freezes the ring in amber forever; a
         // frozen amber is a frozen intersection. Same F-1 escalation.
-        enter_flash_clearance(current, now);
+        enter_flash_clearance(current, now, "emergency ring");
         return step_flash(now);
     } else if (!sched_trusted &&
                el * 1000.0f >=
@@ -413,7 +454,7 @@ ValidatedPhase SafetyLayer::step_emergency(TimePoint now) {
         // exactly the "ALL_RED as permanent rest state" this escalation
         // exists to forbid. Same F-1 path; the pre-FLASH clearance clamps to
         // the compile-time default, so it cannot freeze again.
-        enter_flash_clearance(current, now);
+        enter_flash_clearance(current, now, "emergency ring");
         return step_flash(now);
     }
 
@@ -427,14 +468,15 @@ ValidatedPhase SafetyLayer::step_emergency(TimePoint now) {
 
 // ── F-1: terminal FLASH degraded mode ───────────────────────────────────────
 
-void SafetyLayer::enter_flash_clearance(Phase stuck_phase, TimePoint now) {
+void SafetyLayer::enter_flash_clearance(Phase stuck_phase, TimePoint now,
+                                        const char* context) {
     stuck_phase_ = stuck_phase;
     state_ = State::FLASH_CLEARANCE;
     applied_ = Phase::ALL_RED;
     phase_start_ = now;
-    spdlog::critical("[SAFETY][E-5] corrupt emergency schedule froze {} — "
-                     "clearing the box, then terminal FLASH",
-                     phase_to_string(stuck_phase_));
+    spdlog::critical("[SAFETY][E-5] corrupt timing schedule froze {} in the "
+                     "{} — clearing the box, then terminal FLASH",
+                     phase_to_string(stuck_phase_), context);
 }
 
 ValidatedPhase SafetyLayer::step_flash(TimePoint now) {

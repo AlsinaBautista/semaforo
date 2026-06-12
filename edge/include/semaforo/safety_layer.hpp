@@ -210,7 +210,8 @@ private:
     ValidatedPhase step_normal(Phase desired, TimePoint now);
     ValidatedPhase step_emergency(TimePoint now);
     ValidatedPhase step_flash(TimePoint now);
-    void enter_flash_clearance(Phase stuck_phase, TimePoint now);
+    void enter_flash_clearance(Phase stuck_phase, TimePoint now,
+                               const char* context);
     void begin_yellow(Phase target_green, TimePoint now);
     float elapsed_s(TimePoint now) const;
     float ring_duration(Phase p) const;

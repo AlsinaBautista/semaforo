@@ -30,14 +30,17 @@ bool SimulationSignalController::set_phase(Phase phase) {
     state_.current_phase = phase;
     state_.phase_start = now;
 
-    // Reset all
+    // Reset all (including the protected arrows: a left arrow left lit from a
+    // previous phase against a cross green is a conflicting indication).
     state_.north_south.red = false;
     state_.north_south.yellow = false;
     state_.north_south.green = false;
+    state_.north_south.left_arrow = false;
     state_.north_south.flashing = false;
     state_.east_west.red = false;
     state_.east_west.yellow = false;
     state_.east_west.green = false;
+    state_.east_west.left_arrow = false;
     state_.east_west.flashing = false;
 
     switch (phase) {
@@ -129,10 +132,12 @@ void SimulationSignalController::set_emergency_flash() {
     state_.north_south.red = true;
     state_.north_south.yellow = false;
     state_.north_south.green = false;
+    state_.north_south.left_arrow = false;
     state_.north_south.flashing = true;
     state_.east_west.red = true;
     state_.east_west.yellow = false;
     state_.east_west.green = false;
+    state_.east_west.left_arrow = false;
     state_.east_west.flashing = true;
     spdlog::warn("SimulationSignalController: EMERGENCY FLASH ACTIVATED");
 }

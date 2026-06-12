@@ -714,6 +714,165 @@ TEST(SafetyLayerFlash, FlashBlinkIsSustainedOneHertz) {
     EXPECT_NE(lit(3'600'000), lit(3'600'500));
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// Normal-mode corruption guards (F-1 legs in step_normal)
+//
+// The normal interlock self-times from the same Timings struct as the
+// emergency ring, so the same corruption class (NaN/inf/absurd) can make its
+// `elapsed >= schedule` transitions unreachable. Every such freeze vector
+// must escalate through the SAME F-1 pipeline (brief clamped clearance →
+// terminal FLASH), never hold a frozen phase, and never fire on sane timings.
+// ════════════════════════════════════════════════════════════════════════════
+
+// A corrupt yellow in NORMAL mode (no emergency engaged) must not freeze the
+// amber: the guard escalates it through clearance to terminal FLASH.
+TEST(SafetyLayerNormalCorruption, CorruptYellowEndsInTerminalFlash) {
+    SafetyLayer::Timings t = test_timings();
+    t.yellow = std::numeric_limits<float>::quiet_NaN(); // stuck normal amber
+    SafetyLayer sl(t, MajorApproach::NS);
+    const TimePoint base = SafetyLayer::Clock::now();
+    sl.reset(base);
+
+    // Serve NS, then request the cross green so a (stuck) amber begins.
+    auto desired_fn = [](int step) {
+        return (step < 40) ? Phase::GREEN_NS : Phase::GREEN_EW;
+    };
+    auto segs = run_segments(sl, base, desired_fn, 0.25f, 200); // 50 s horizon
+    auto tl = phases_only(segs);
+
+    const std::vector<Phase> expected = {Phase::ALL_RED, Phase::GREEN_NS,
+                                         Phase::YELLOW_NS, Phase::ALL_RED,
+                                         Phase::FLASH_YELLOW_NS};
+    EXPECT_EQ(tl, expected);
+    EXPECT_EQ(sl.get_state(), SafetyLayer::State::FLASH);
+}
+
+// A corrupt all-red in NORMAL mode can never complete a clearance, so no
+// green could ever be served again — the guard must refuse to hold ALL_RED
+// as a rest state, and the pre-FLASH clearance must use the CLAMPED default
+// (the configured all_red is the corrupt value).
+TEST(SafetyLayerNormalCorruption, CorruptAllRedEndsInTerminalFlash) {
+    SafetyLayer::Timings t = test_timings();
+    t.all_red = std::numeric_limits<float>::quiet_NaN(); // stuck clearance
+    SafetyLayer sl(t, MajorApproach::EW);
+    const TimePoint base = SafetyLayer::Clock::now();
+    sl.reset(base);
+
+    // Just under the guard ceiling the boot clearance is still ALL_RED…
+    auto r = sl.validate(Phase::GREEN_NS, at(base, 7.9f));
+    EXPECT_EQ(r.phase, Phase::ALL_RED);
+    EXPECT_EQ(sl.get_state(), SafetyLayer::State::ALL_RED);
+
+    // …at 8 s the guard fires into the pre-FLASH clearance…
+    r = sl.validate(Phase::GREEN_NS, at(base, 8.0f));
+    EXPECT_EQ(r.phase, Phase::ALL_RED);
+    EXPECT_EQ(sl.get_state(), SafetyLayer::State::FLASH_CLEARANCE);
+
+    // …and 2 s later (clamped compile-time default) it is terminal FLASH.
+    r = sl.validate(Phase::GREEN_NS, at(base, 10.0f));
+    EXPECT_EQ(r.phase, Phase::FLASH_YELLOW_EW);
+    EXPECT_EQ(sl.get_state(), SafetyLayer::State::FLASH);
+}
+
+// A corrupt max_green disables the A-1 watchdog, so a constant request would
+// hold its green forever. The guard bounds any green by the system-wide
+// MAX_GREEN_S ceiling and escalates to terminal FLASH.
+TEST(SafetyLayerNormalCorruption, CorruptMaxGreenEndsInTerminalFlash) {
+    SafetyLayer::Timings t = test_timings();
+    t.max_green = std::numeric_limits<float>::quiet_NaN(); // A-1 disabled
+    SafetyLayer sl(t, MajorApproach::NS);
+    const TimePoint base = SafetyLayer::Clock::now();
+    sl.reset(base);
+
+    const float dt = 0.5f;
+    auto desired_fn = [](int) { return Phase::GREEN_NS; }; // AI stuck on NS
+    auto segs = run_segments(sl, base, desired_fn, dt, 140); // 70 s horizon
+    auto tl = phases_only(segs);
+
+    const std::vector<Phase> expected = {Phase::ALL_RED, Phase::GREEN_NS,
+                                         Phase::ALL_RED,
+                                         Phase::FLASH_YELLOW_NS};
+    EXPECT_EQ(tl, expected);
+    EXPECT_EQ(sl.get_state(), SafetyLayer::State::FLASH);
+
+    // The stuck green was bounded by the hard MAX_GREEN_S ceiling.
+    ASSERT_GE(segs.size(), 2u);
+    EXPECT_LE(segs[1].duration_s, SafetyLayer::MAX_GREEN_S + dt + 0.01f);
+}
+
+// Negative control: with sane timings the corruption guards must NEVER fire —
+// a long randomized storm in normal mode produces no FLASH and keeps the
+// C-3 interlock intact (the guards change nothing on the healthy path).
+TEST(SafetyLayerNormalCorruption, SaneSchedulesNeverFlash) {
+    const Phase greens[] = {Phase::GREEN_NS, Phase::GREEN_EW,
+                            Phase::GREEN_NS_LEFT, Phase::GREEN_EW_LEFT};
+
+    for (unsigned seed = 0; seed < 4; ++seed) {
+        SafetyLayer sl(test_timings(), MajorApproach::NS);
+        const TimePoint base = SafetyLayer::Clock::now();
+        std::mt19937 rng(seed);
+        std::uniform_int_distribution<int> pick(0, 3);
+        std::uniform_real_distribution<float> jitter(0.2f, 1.4f);
+
+        std::vector<Phase> tl;
+        Phase last = Phase::ALL_RED;
+        bool first = true;
+        float clock_s = 0.0f;
+        for (int i = 0; i < 2000; ++i) {
+            clock_s += jitter(rng);
+            auto r = sl.validate(greens[pick(rng)], at(base, clock_s));
+            EXPECT_FALSE(SafetyLayer::is_flash(r.phase))
+                << "FLASH reached with sane timings (seed " << seed << ")";
+            if (first || r.phase != last) {
+                tl.push_back(r.phase);
+                last = r.phase;
+                first = false;
+            }
+        }
+        assert_interlock(tl);
+        EXPECT_NE(sl.get_state(), SafetyLayer::State::FLASH);
+        EXPECT_NE(sl.get_state(), SafetyLayer::State::FLASH_CLEARANCE);
+    }
+}
+
+// ── Shutdown emergency flash (output layer) ─────────────────────────────────
+
+// set_emergency_flash() — the shutdown path — must produce a true flashing
+// all-red (FLASH_ALL_RED + both heads red&flashing), wiping every other lamp
+// including a protected left arrow lit by the previous phase.
+TEST(SimulationController, EmergencyFlashIsFlashingRedAllApproaches) {
+    SimulationSignalController ctrl;
+    ctrl.set_phase(Phase::GREEN_NS_LEFT);
+    ASSERT_TRUE(ctrl.get_signal_state().north_south.left_arrow);
+
+    ctrl.set_emergency_flash();
+    EXPECT_EQ(ctrl.get_current_phase(), Phase::FLASH_ALL_RED);
+
+    const SignalState s = ctrl.get_signal_state();
+    EXPECT_TRUE(s.north_south.red && s.north_south.flashing);
+    EXPECT_TRUE(s.east_west.red && s.east_west.flashing);
+    EXPECT_FALSE(s.north_south.yellow || s.north_south.green ||
+                 s.north_south.left_arrow);
+    EXPECT_FALSE(s.east_west.yellow || s.east_west.green ||
+                 s.east_west.left_arrow);
+    // The 1 Hz cadence itself is proven in FlashBlinkIsSustainedOneHertz.
+}
+
+// A protected left arrow must not survive into the next phase: an NS arrow
+// still lit against an EW green is a conflicting indication.
+TEST(SimulationController, LeftArrowClearedOnPhaseChange) {
+    SimulationSignalController ctrl;
+    ctrl.set_phase(Phase::GREEN_NS_LEFT);
+    ASSERT_TRUE(ctrl.get_signal_state().north_south.left_arrow);
+
+    ctrl.set_phase(Phase::GREEN_EW);
+    const SignalState s = ctrl.get_signal_state();
+    EXPECT_FALSE(s.north_south.left_arrow);
+    EXPECT_TRUE(s.north_south.red);
+    EXPECT_TRUE(s.east_west.green);
+    EXPECT_FALSE(s.east_west.left_arrow);
+}
+
 TEST(SafetyLayer, DeterministicForFixedSeed) {
     auto build_timeline = []() {
         SafetyLayer sl(test_timings());
