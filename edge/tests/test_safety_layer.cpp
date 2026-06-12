@@ -858,6 +858,43 @@ TEST(SimulationController, EmergencyFlashIsFlashingRedAllApproaches) {
     // The 1 Hz cadence itself is proven in FlashBlinkIsSustainedOneHertz.
 }
 
+// Exhaustive closure of the left-arrow clearing: for EVERY ordered pair of
+// phases (from, to), after driving from→to the arrows must be exactly those
+// of `to` (NS arrow iff GREEN_NS_LEFT, EW arrow iff GREEN_EW_LEFT) — no path
+// exists where a protected arrow survives a phase change. The shutdown
+// emergency flash must likewise wipe both arrows from any prior phase.
+TEST(SimulationController, ArrowsClearedExhaustivelyAcrossAllPhasePairs) {
+    const Phase all_phases[] = {
+        Phase::ALL_RED,         Phase::GREEN_NS,       Phase::YELLOW_NS,
+        Phase::GREEN_EW,        Phase::YELLOW_EW,      Phase::GREEN_NS_LEFT,
+        Phase::GREEN_EW_LEFT,   Phase::FLASH_YELLOW_NS,
+        Phase::FLASH_YELLOW_EW, Phase::FLASH_ALL_RED,
+    };
+
+    for (Phase from : all_phases) {
+        for (Phase to : all_phases) {
+            SimulationSignalController ctrl;
+            ctrl.set_phase(from);
+            ctrl.set_phase(to);
+            const SignalState s = ctrl.get_signal_state();
+            EXPECT_EQ(s.north_south.left_arrow, to == Phase::GREEN_NS_LEFT)
+                << "NS arrow wrong after " << phase_to_string(from) << " → "
+                << phase_to_string(to);
+            EXPECT_EQ(s.east_west.left_arrow, to == Phase::GREEN_EW_LEFT)
+                << "EW arrow wrong after " << phase_to_string(from) << " → "
+                << phase_to_string(to);
+        }
+
+        SimulationSignalController ctrl;
+        ctrl.set_phase(from);
+        ctrl.set_emergency_flash();
+        const SignalState s = ctrl.get_signal_state();
+        EXPECT_FALSE(s.north_south.left_arrow || s.east_west.left_arrow)
+            << "An arrow survived set_emergency_flash() from "
+            << phase_to_string(from);
+    }
+}
+
 // A protected left arrow must not survive into the next phase: an NS arrow
 // still lit against an EW green is a conflicting indication.
 TEST(SimulationController, LeftArrowClearedOnPhaseChange) {
