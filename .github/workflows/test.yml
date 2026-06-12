@@ -35,3 +35,55 @@ jobs:
       - name: Run Coordinator tests
         run: |
           cd network/coordinator && python -m pytest tests/ -v --tb=short
+
+  # ── Edge C++ (safety-critical core): build + full test suite ──────────────
+  # The SafetyLayer / CommandParser / Detector invariants are proven by the
+  # GoogleTest suites under edge/tests. This job is the CI net for them: it
+  # fails on any compiler warning (-Werror) and on any failing test.
+  edge-cpp-tests:
+    runs-on: ubuntu-latest
+
+    env:
+      # Same ONNX Runtime version the project uses locally (Homebrew 1.26.0).
+      ONNXRUNTIME_VERSION: "1.26.0"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake g++ make pkg-config \
+            libgtest-dev \
+            libopencv-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libspdlog-dev libyaml-cpp-dev libssl-dev \
+            libpaho-mqtt-dev
+
+      - name: Install ONNX Runtime
+        run: |
+          curl -fsSL -o /tmp/onnxruntime.tgz \
+            "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz"
+          sudo mkdir -p /opt/onnxruntime
+          sudo tar -xzf /tmp/onnxruntime.tgz -C /opt/onnxruntime --strip-components=1
+          # The release tarball ships libs in lib/ and headers in include/,
+          # but its CMake config references lib64/ and include/onnxruntime —
+          # alias both so find_package(onnxruntime) resolves.
+          sudo ln -sfn /opt/onnxruntime/lib /opt/onnxruntime/lib64
+          sudo ln -sfn /opt/onnxruntime/include /opt/onnxruntime/include/onnxruntime
+          echo "CMAKE_PREFIX_PATH=/opt/onnxruntime" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=/opt/onnxruntime/lib" >> "$GITHUB_ENV"
+
+      - name: Configure and build Edge (Release)
+        # paho.mqtt.cpp (FetchContent) links the distro's eclipse-paho-mqtt-c
+        # (libpaho-mqtt-dev), mirroring the local macOS/Homebrew setup.
+        run: |
+          cmake -S edge -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+
+      - name: Run ALL Edge tests
+        # ctest exits non-zero if any test fails, which fails the job.
+        run: |
+          ctest --test-dir build --output-on-failure
