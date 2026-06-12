@@ -55,8 +55,8 @@ _DEFAULT_ONNX_MODEL = (
 ONNX_MODEL_PATH = os.getenv("ONNX_MODEL_PATH", str(_DEFAULT_ONNX_MODEL))
 
 # Brain observation contract (brain/src/environments/multi_intersection.py):
-# [phase one-hot (2), min-green flag (1), 12 lane densities, 12 lane queues],
-# zero-padded to 32 and clipped to [0, 1].
+# canonical 17-dim layout — [queue x4, density x4, phase one-hot x4,
+# phase_elapsed, downstream x4], clipped to [0, 1].
 _OBS_SIZE = 17
 _NUM_LANES = 12
 _LANE_CAPACITY_VEHICLES = 20.0  # vehicles per lane considered saturation
@@ -75,9 +75,12 @@ class AIPolicyWrapper:
         if not path.is_file():
             raise RuntimeError(
                 f"ONNX actor model not found: {path.resolve()}. "
-                "The coordinator refuses to start without the exported AI "
-                "policy; run `PYTHONPATH=brain .venv/bin/python "
-                "brain/scripts/export_model.py` (override with ONNX_MODEL_PATH)."
+                "The coordinator refuses to start without an AI policy on "
+                "disk. Run `make brain-stub` to generate the temporary "
+                "pre-retrain stub (then start with ONNX_MODEL_PATH="
+                "brain/models/policy_stub.onnx), or export the real actor "
+                "with `PYTHONPATH=brain .venv/bin/python "
+                "brain/scripts/export_model.py`."
             )
         self._session = ort.InferenceSession(
             str(path), providers=["CPUExecutionProvider"]
@@ -553,7 +556,14 @@ def main() -> None:
         datefmt="%Y-%m-%dT%H:%M:%S",
     )
 
-    coordinator = GreenWaveCoordinator()
+    # Startup preconditions (missing model, broken topic contract, bad
+    # topology) raise RuntimeError with an actionable message: surface that
+    # one line and exit non-zero instead of dumping a traceback.
+    try:
+        coordinator = GreenWaveCoordinator()
+    except RuntimeError as e:
+        logging.getLogger("coordinator").critical("startup aborted: %s", e)
+        sys.exit(1)
 
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, coordinator.handle_signal)

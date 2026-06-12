@@ -121,6 +121,9 @@ cd semaforo
 # Ejecutar el script de configuración
 chmod +x scripts/setup_dev.sh
 ./scripts/setup_dev.sh
+
+# Regenerar el stub ONNX (gitignoreado; requerido tras cada clone fresco)
+make brain-stub   # luego: ONNX_MODEL_PATH=brain/models/policy_stub.onnx para el Coordinator
 ```
 
 ### 2. Brain — Entrenamiento RL

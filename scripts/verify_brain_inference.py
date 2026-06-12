@@ -9,7 +9,8 @@ Standalone end-to-end check of the Brain→Coordinator inference path:
      (asymmetric trace: actor only, centralized critic pruned).
   2. The Coordinator's AIPolicyWrapper loads the .onnx into an
      onnxruntime.InferenceSession.
-  3. A dummy [1, 32] observation produces a valid (1, 2) logits matrix.
+  3. A dummy [1, 17] observation (canonical layout) produces a valid
+     action matrix.
   4. predict() maps real telemetry to a valid, deterministic phase string.
 
 The export runs in a subprocess: the brain package and the coordinator
@@ -17,10 +18,13 @@ package are both imported as `src`, so they cannot share one interpreter.
 
 Usage:
     .venv/bin/python scripts/verify_brain_inference.py
+    # Or verify an already-exported model (skips the checkpoint export):
+    .venv/bin/python scripts/verify_brain_inference.py --model brain/models/policy_stub.onnx
 """
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -42,40 +46,59 @@ def check(condition: bool, message: str) -> None:
 
 
 def main() -> None:
-    # --- 1. Export the actor to ONNX (subprocess: brain owns `src` there) ------
-    check(CHECKPOINT.is_dir(), f"missing MAPPO checkpoint: {CHECKPOINT}")
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(EXPORT_CLI),
-            "--checkpoint", str(CHECKPOINT),
-            "--output", str(ONNX_PATH),
-        ],
-        cwd=str(REPO_ROOT),
-        capture_output=True,
-        text=True,
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--model",
+        type=Path,
+        default=None,
+        help="Verify this .onnx directly instead of re-exporting from the "
+             "MAPPO checkpoint (e.g. brain/models/policy_stub.onnx).",
     )
-    if result.returncode != 0:
-        print(result.stdout)
-        print(result.stderr)
-    check(result.returncode == 0, f"export_model.py failed (rc={result.returncode})")
-    check(ONNX_PATH.is_file(), f"export reported success but {ONNX_PATH} is missing")
-    print(f"[1/4] actor exported to {ONNX_PATH.relative_to(REPO_ROOT)}")
+    args = parser.parse_args()
+
+    # --- 1. Export the actor to ONNX (subprocess: brain owns `src` there) ------
+    if args.model is not None:
+        model_path = args.model.resolve()
+        check(model_path.is_file(), f"model not found: {model_path}")
+        print(f"[1/4] using existing model {args.model} (export skipped)")
+    else:
+        model_path = ONNX_PATH
+        check(CHECKPOINT.is_dir(), f"missing MAPPO checkpoint: {CHECKPOINT}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(EXPORT_CLI),
+                "--checkpoint", str(CHECKPOINT),
+                "--output", str(ONNX_PATH),
+            ],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(result.stdout)
+            print(result.stderr)
+        check(result.returncode == 0, f"export_model.py failed (rc={result.returncode})")
+        check(ONNX_PATH.is_file(), f"export reported success but {ONNX_PATH} is missing")
+        print(f"[1/4] actor exported to {ONNX_PATH.relative_to(REPO_ROOT)}")
 
     # --- 2. Instantiate the Coordinator's wrapper ------------------------------
     from src.coordinator import AIPolicyWrapper
 
-    wrapper = AIPolicyWrapper(model_path=ONNX_PATH)
+    wrapper = AIPolicyWrapper(model_path=model_path)
     print("[2/4] AIPolicyWrapper loaded the ONNX model into onnxruntime")
 
-    # --- 3. Dummy [1, 32] observation -> valid action matrix -------------------
-    dummy = np.random.rand(1, 32).astype(np.float32)
+    # --- 3. Dummy [1, 17] observation -> valid action matrix -------------------
+    dummy = np.random.rand(1, 17).astype(np.float32)
     out = wrapper.infer(dummy)
     check(isinstance(out, np.ndarray), f"infer() returned {type(out).__name__}, not ndarray")
-    check(out.shape == (1, 2), f"logits shape is {out.shape}, expected (1, 2)")
+    # The trained actor emits Discrete(2) logits; the uniform pre-retrain stub
+    # emits a 4-slot action vector. Either way: one row per observation.
+    check(out.shape in {(1, 2), (1, 4)}, f"action shape is {out.shape}, expected (1, 2) or (1, 4)")
     check(out.dtype == np.float32, f"logits dtype is {out.dtype}, expected float32")
     check(bool(np.isfinite(out).all()), f"logits contain non-finite values: {out}")
-    print(f"[3/4] dummy [1, 32] inference OK (logits: {out[0].tolist()})")
+    print(f"[3/4] dummy inference OK — input shape: {tuple(dummy.shape)}, "
+          f"output: {out[0].tolist()}")
 
     # --- 4. Telemetry round-trip through predict() ------------------------------
     telemetry = {
