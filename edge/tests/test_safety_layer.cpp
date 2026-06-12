@@ -21,6 +21,7 @@
 
 #include <chrono>
 #include <functional>
+#include <limits>
 #include <random>
 #include <vector>
 
@@ -297,6 +298,46 @@ TEST(SafetyLayer, ExitEmergencyReturnsThroughAllRed) {
     EXPECT_FALSE(sl.in_emergency());
     EXPECT_EQ(sl.get_current_phase(), Phase::ALL_RED);
     EXPECT_EQ(sl.get_state(), SafetyLayer::State::ALL_RED);
+}
+
+// ── E-5: emergency-ring max-green watchdog ──────────────────────────────────
+// A corrupt emergency_green (NaN / infinity / absurdly large) makes the ring's
+// normal self-timed transition unreachable — without a watchdog the green
+// would hold forever, an indefinite freeze in the one mode that must never
+// stall. The watchdog must force ALL_RED before 8001 ms of stuck green, and
+// the ring must keep rotating (anti-starvation) afterwards.
+TEST(SafetyLayer, EmergencyWatchdogForcesAllRed) {
+    SafetyLayer::Timings t = test_timings();
+    t.emergency_green = std::numeric_limits<float>::infinity(); // stuck green
+    SafetyLayer sl(t);
+    const TimePoint base = SafetyLayer::Clock::now();
+
+    sl.set_emergency_mode(true, base);
+    ASSERT_EQ(sl.get_current_phase(), Phase::ALL_RED); // ring entry clearance
+
+    // The 2 s entry clearance completes → the first green is served and,
+    // with an infinite schedule, can never transition on its own.
+    const TimePoint green_start = at(base, 2.0f);
+    auto r = sl.validate(Phase::GREEN_NS, green_start);
+    ASSERT_EQ(r.phase, Phase::GREEN_NS);
+
+    // Still green just under the watchdog ceiling…
+    r = sl.validate(Phase::GREEN_NS,
+                    green_start + std::chrono::milliseconds(7999));
+    EXPECT_EQ(r.phase, Phase::GREEN_NS);
+
+    // …but by 8000 ms (< 8001 ms) the watchdog must have forced ALL_RED,
+    // without leaving emergency mode.
+    r = sl.validate(Phase::GREEN_NS,
+                    green_start + std::chrono::milliseconds(8000));
+    EXPECT_EQ(r.phase, Phase::ALL_RED);
+    EXPECT_TRUE(sl.in_emergency());
+
+    // Liveness: the forced ALL_RED is the clearance BEFORE the cross green,
+    // so the opposing approach is served next — no starvation in degradation.
+    r = sl.validate(Phase::GREEN_NS,
+                    green_start + std::chrono::milliseconds(10000));
+    EXPECT_EQ(r.phase, Phase::GREEN_EW);
 }
 
 // ── Randomized stress: invariants hold for arbitrary command storms ─────────

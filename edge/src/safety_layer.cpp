@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstdint>
 
 #include <spdlog/spdlog.h>
 
@@ -26,6 +28,39 @@ constexpr std::array<Phase, 6> kEmergencyRing = {
     Phase::YELLOW_EW,  // index 5  → wraps back to ALL_RED
 };
 constexpr std::size_t kRingSize = kEmergencyRing.size();
+
+/// @brief E-5: sanity timeout for an emergency-ring green whose *schedule* is
+/// untrustworthy (ms). This is NOT the ring's normal green duration.
+///
+/// The ring's scheduled green time (``Timings::emergency_green``) is runtime
+/// configuration; if it is corrupt — NaN, infinity, negative, or above
+/// ``MAX_GREEN_S`` — the ring's normal ``elapsed >= schedule`` advance can
+/// never fire and a green would freeze indefinitely, in EMERGENCY mode, the
+/// one state that must never stall.
+///
+/// When this fires / when it does NOT:
+///  * Fires ONLY while the current green's schedule fails the trust check in
+///    ``step_emergency`` (``isfinite && >= 0 && <= MAX_GREEN_S``) AND the
+///    green has been held past this timeout. It then forces ALL_RED.
+///  * NEVER fires for a sane schedule: a healthy green (e.g. the default
+///    20 s ``EMERGENCY_GREEN_S``) runs to completion through the normal
+///    advance branch, which is evaluated first and unconditionally.
+///
+/// INVARIANT (E-5 worst-case green bound): time-in-green inside the
+/// emergency ring is bounded by
+///     max(MAX_GREEN_S, kEmergencyScheduleSanityTimeoutMs / 1000)
+/// (+ one validate() polling tick) — trusted schedules are capped at
+/// MAX_GREEN_S by the trust check itself, untrusted ones by this timeout.
+/// The static_assert below pins the timeout under MAX_GREEN_S, so the bound
+/// collapses to MAX_GREEN_S.
+static constexpr std::uint32_t kEmergencyScheduleSanityTimeoutMs = 8000;
+
+static_assert(static_cast<float>(kEmergencyScheduleSanityTimeoutMs) <=
+                  SafetyLayer::MAX_GREEN_S * 1000.0f,
+              "E-5 invariant: the emergency-ring sanity timeout must not "
+              "exceed MAX_GREEN_S, so the worst-case time-in-green in the "
+              "ring is bounded by MAX_GREEN_S for both trusted and untrusted "
+              "schedules.");
 
 } // namespace
 
@@ -227,13 +262,37 @@ ValidatedPhase SafetyLayer::step_normal(Phase desired, TimePoint now) {
 ValidatedPhase SafetyLayer::step_emergency(TimePoint now) {
     const Phase current = kEmergencyRing[ring_idx_];
     const float el = elapsed_s(now);
+    const float sched = ring_duration(current);
 
-    if (el >= ring_duration(current)) {
+    // A schedule is only trusted when it is a sane, finite duration bounded by
+    // the system-wide green ceiling. A corrupt value (NaN/inf/absurd) makes the
+    // `el >= sched` advance below unreachable, which would freeze the ring.
+    const bool sched_trusted =
+        std::isfinite(sched) && sched >= 0.0f && sched <= MAX_GREEN_S;
+
+    if (el >= sched) {
         ring_idx_ = (ring_idx_ + 1) % kRingSize;
         applied_ = kEmergencyRing[ring_idx_];
         phase_start_ = now;
         spdlog::info("SafetyLayer[EMERGENCY]: → {} (ring idx {})",
                      phase_to_string(applied_), ring_idx_);
+    } else if (is_green(current) && !sched_trusted &&
+               el * 1000.0f >=
+                   static_cast<float>(kEmergencyScheduleSanityTimeoutMs)) {
+        // ── E-5: max-green watchdog for the emergency ring ──────────────────
+        // The per-phase green timer (elapsed since phase_start_, which resets
+        // on every ring transition) exceeded the hard ceiling while the
+        // scheduled transition cannot fire. Force ALL_RED immediately rather
+        // than hold a green indefinitely; jumping to the ring's next ALL_RED
+        // entry keeps the anti-starvation rotation intact (the cross approach
+        // is served next). No dynamic allocation on this path.
+        spdlog::critical("[SAFETY] max-green watchdog triggered in emergency "
+                         "ring, forcing ALL_RED");
+        do {
+            ring_idx_ = (ring_idx_ + 1) % kRingSize; // bounded: ≤ kRingSize steps
+        } while (kEmergencyRing[ring_idx_] != Phase::ALL_RED);
+        applied_ = Phase::ALL_RED;
+        phase_start_ = now;
     }
 
     ValidatedPhase r;

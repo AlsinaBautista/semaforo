@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <numeric>
 #include <opencv2/imgproc.hpp>
 
@@ -39,6 +40,7 @@ struct Detector::Impl {
     float nms_threshold = 0.45f;
     cv::Size input_size{640, 640};
     bool initialized = false;
+    bool stub_mode = false;      ///< No model: detect() emits nothing, allocates nothing.
 
     // ── Preallocated per-frame scratch (M-5) ────────────────────────────────
     // Sized once, overwritten in place every frame: no per-frame heap churn.
@@ -152,6 +154,19 @@ bool Detector::init(const std::string& model_path,
                     float nms_threshold) {
     impl_->conf_threshold = conf_threshold;
     impl_->nms_threshold = nms_threshold;
+
+    // Stub mode: an empty or nonexistent model path means "run without a
+    // model" — regardless of whether ONNX Runtime is linked into the build.
+    // No session is created and detect() emits no detections and performs no
+    // heap allocation, which is what the zero-allocation loop proofs rely on.
+    std::error_code fs_ec;
+    if (model_path.empty() || !std::filesystem::exists(model_path, fs_ec)) {
+        impl_->stub_mode = true;
+        impl_->initialized = true;
+        spdlog::warn("Detector: stub mode — model path '{}' is empty or does "
+                     "not exist; no detections will be emitted.", model_path);
+        return true;
+    }
 
 #ifdef ONNXRUNTIME_AVAILABLE
     try {
@@ -386,6 +401,11 @@ bool Detector::detect(const cv::Mat& frame, ObjectPool<Detection>& out) {
     }
 
 #ifdef ONNXRUNTIME_AVAILABLE
+    // Stub mode: no session exists. Emit nothing, allocate nothing, never throw.
+    if (impl_->stub_mode || !impl_->session) {
+        return true;
+    }
+
     // Preprocess into the preallocated buffers (no per-frame allocation).
     preprocess(frame, impl_->buffers_);
     std::vector<float>& input_data = impl_->buffers_.tensor;
