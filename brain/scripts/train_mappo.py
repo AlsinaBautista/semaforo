@@ -192,6 +192,13 @@ def build_config(args: argparse.Namespace) -> PPOConfig:
         .env_runners(
             num_env_runners=args.num_env_runners,
             rollout_fragment_length="auto",
+            # RLlib's default sample_timeout_s=60 livelocks full-size runs: a
+            # 12000-step batch over 4 runners is ~3000 steps/runner at ~28 ms
+            # SUMO-step plus several per-episode SUMO relaunches — well past
+            # 60 s — so every sampling round was discarded and retried forever
+            # ("No samples returned from remote workers", 0 iterations in 24
+            # min). Infra timeout only; no effect on the learning math.
+            sample_timeout_s=600.0,
         )
         # Learner pinned to the local CPU: RLlib 2.55 device resolution is
         # CUDA-only (no MPS on Apple Silicon), and a hidden_dim=256 MLP trains
