@@ -15,6 +15,7 @@ import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.vec_env import VecEnv
 
 
 class PPOTrafficAgent:
@@ -59,10 +60,10 @@ class PPOTrafficAgent:
 
     def train(
         self,
-        env: gym.Env,
+        env: gym.Env | VecEnv,
         total_timesteps: int = 100_000,
         save_path: str | Path = "models/ppo_traffic",
-        eval_env: gym.Env | None = None,
+        eval_env: gym.Env | VecEnv | None = None,
         eval_freq: int = 5_000,
     ) -> PPO:
         """Train the PPO model on the given environment.
@@ -116,7 +117,7 @@ class PPOTrafficAgent:
 
     def evaluate(
         self,
-        env: gym.Env,
+        env: gym.Env | VecEnv,
         n_episodes: int = 5,
     ) -> dict[str, Any]:
         """Evaluate the current model on *env* for *n_episodes*.
@@ -135,26 +136,17 @@ class PPOTrafficAgent:
         if self._model is None:
             raise RuntimeError("No model loaded. Call train() or load() first.")
 
-        mean_reward, std_reward = evaluate_policy(
-            self._model, env, n_eval_episodes=n_episodes, deterministic=True
+        episode_rewards, _ = evaluate_policy(
+            self._model, 
+            env, 
+            n_eval_episodes=n_episodes, 
+            deterministic=True,
+            return_episode_rewards=True
         )
 
-        # Collect per-episode rewards for downstream analysis.
-        episode_rewards: list[float] = []
-        for _ in range(n_episodes):
-            obs, _ = env.reset()
-            total_reward = 0.0
-            done = False
-            while not done:
-                action, _ = self._model.predict(obs, deterministic=True)
-                obs, reward, terminated, truncated, _ = env.step(action)
-                total_reward += reward
-                done = terminated or truncated
-            episode_rewards.append(total_reward)
-
         return {
-            "mean_reward": float(mean_reward),
-            "std_reward": float(std_reward),
+            "mean_reward": float(np.mean(episode_rewards)),
+            "std_reward": float(np.std(episode_rewards)),
             "episode_rewards": episode_rewards,
         }
 

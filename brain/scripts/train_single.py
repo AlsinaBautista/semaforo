@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -70,12 +71,24 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Launch SUMO with the GUI (for debugging).",
     )
+    parser.add_argument(
+        "--n-envs",
+        type=int,
+        default=0,
+        help="Number of parallel environments (default: 0 = os.cpu_count()).",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     """Entry point: create environment, train agent, save model and metrics."""
     args = parse_args()
+
+    n_envs = args.n_envs if args.n_envs > 0 else (os.cpu_count() or 1)
+    
+    if n_envs > 1 and args.gui:
+        print("Warning: SUMO GUI is not supported with multiple environments. Disabling GUI.")
+        args.gui = False
 
     print("=" * 60)
     print("  Semáforo Inteligente — PPO Single-Intersection Training")
@@ -85,14 +98,26 @@ def main() -> None:
     print(f"  Timesteps      : {args.total_timesteps:,}")
     print(f"  Save path      : {args.save_path}")
     print(f"  Delta time     : {args.delta_time}s")
+    print(f"  Parallel envs  : {n_envs}")
     print("=" * 60)
 
     # Create training environment.
-    env = SingleIntersectionEnv(
-        net_file=args.net_file,
-        route_file=args.route_file,
-        delta_time=args.delta_time,
-        use_gui=args.gui,
+    from stable_baselines3.common.env_util import make_vec_env
+    from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
+
+    env_kwargs = {
+        "net_file": args.net_file,
+        "route_file": args.route_file,
+        "delta_time": args.delta_time,
+        "use_gui": args.gui,
+    }
+
+    vec_env_cls = SubprocVecEnv if n_envs > 1 else DummyVecEnv
+    env = make_vec_env(
+        SingleIntersectionEnv,
+        n_envs=n_envs,
+        env_kwargs=env_kwargs,
+        vec_env_cls=vec_env_cls,
     )
 
     # Initialise and train the agent.
