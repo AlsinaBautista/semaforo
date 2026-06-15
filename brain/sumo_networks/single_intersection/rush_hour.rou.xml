@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SUMO Routes file for Rush Hour Scenario -->
+<!-- Semáforo Inteligente Project -->
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+
+    <vType id="passenger" accel="2.6" decel="4.5" sigma="0.5" length="5.0" minGap="2.5" maxSpeed="13.89" guiShape="passenger"/>
+
+    <!-- Routes -->
+    <route id="ns_through" edges="north_in south_out"/>
+    <route id="ns_left"    edges="north_in east_out"/>
+    <route id="ns_right"   edges="north_in west_out"/>
+
+    <route id="sn_through" edges="south_in north_out"/>
+    <route id="sn_left"    edges="south_in west_out"/>
+    <route id="sn_right"   edges="south_in east_out"/>
+
+    <route id="ew_through" edges="east_in west_out"/>
+    <route id="ew_left"    edges="east_in south_out"/>
+    <route id="ew_right"   edges="east_in north_out"/>
+
+    <route id="we_through" edges="west_in east_out"/>
+    <route id="we_left"    edges="west_in north_out"/>
+    <route id="we_right"   edges="west_in south_out"/>
+
+    <!-- ============================================================ -->
+    <!-- FASE 1: HORA PICO MAÑANA (Avenida Norte-Sur colapsada)       -->
+    <!-- Tiempo: 0 a 1800 segundos (primeros 30 minutos)              -->
+    <!-- ============================================================ -->
+    
+    <!-- Tráfico Masivo Norte-Sur -->
+    <flow id="morning_ns_th" type="passenger" route="ns_through" begin="0" end="1800" probability="0.30" departLane="best" departSpeed="max"/>
+    <flow id="morning_ns_l"  type="passenger" route="ns_left"    begin="0" end="1800" probability="0.05" departLane="best" departSpeed="max"/>
+    <flow id="morning_ns_r"  type="passenger" route="ns_right"   begin="0" end="1800" probability="0.05" departLane="best" departSpeed="max"/>
+    
+    <flow id="morning_sn_th" type="passenger" route="sn_through" begin="0" end="1800" probability="0.30" departLane="best" departSpeed="max"/>
+    <flow id="morning_sn_l"  type="passenger" route="sn_left"    begin="0" end="1800" probability="0.05" departLane="best" departSpeed="max"/>
+    <flow id="morning_sn_r"  type="passenger" route="sn_right"   begin="0" end="1800" probability="0.05" departLane="best" departSpeed="max"/>
+
+    <!-- Tráfico Muerto Este-Oeste -->
+    <flow id="morning_ew_th" type="passenger" route="ew_through" begin="0" end="1800" probability="0.02" departLane="best" departSpeed="max"/>
+    <flow id="morning_we_th" type="passenger" route="we_through" begin="0" end="1800" probability="0.02" departLane="best" departSpeed="max"/>
+
+    <!-- ============================================================ -->
+    <!-- FASE 2: HORA PICO TARDE (Avenida Este-Oeste colapsada)       -->
+    <!-- Tiempo: 1800 a 3600 segundos (últimos 30 minutos)            -->
+    <!-- ============================================================ -->
+    
+    <!-- Tráfico Muerto Norte-Sur -->
+    <flow id="evening_ns_th" type="passenger" route="ns_through" begin="1800" end="3600" probability="0.02" departLane="best" departSpeed="max"/>
+    <flow id="evening_sn_th" type="passenger" route="sn_through" begin="1800" end="3600" probability="0.02" departLane="best" departSpeed="max"/>
+
+    <!-- Tráfico Masivo Este-Oeste -->
+    <flow id="evening_ew_th" type="passenger" route="ew_through" begin="1800" end="3600" probability="0.30" departLane="best" departSpeed="max"/>
+    <flow id="evening_ew_l"  type="passenger" route="ew_left"    begin="1800" end="3600" probability="0.05" departLane="best" departSpeed="max"/>
+    <flow id="evening_ew_r"  type="passenger" route="ew_right"   begin="1800" end="3600" probability="0.05" departLane="best" departSpeed="max"/>
+    
+    <flow id="evening_we_th" type="passenger" route="we_through" begin="1800" end="3600" probability="0.30" departLane="best" departSpeed="max"/>
+    <flow id="evening_we_l"  type="passenger" route="we_left"    begin="1800" end="3600" probability="0.05" departLane="best" departSpeed="max"/>
+    <flow id="evening_we_r"  type="passenger" route="we_right"   begin="1800" end="3600" probability="0.05" departLane="best" departSpeed="max"/>
+
+</routes>
