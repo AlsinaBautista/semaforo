@@ -241,6 +241,14 @@ class SingleIntersectionEnv(gym.Env):
         Returns:
             Standard Gymnasium 5-tuple ``(obs, reward, terminated, truncated, info)``.
         """
+        # Prevent sumo-rl KeyError by forcing sequential phase transitions
+        ts_id = list(self._sumo_env.traffic_signals.keys())[0]
+        ts = self._sumo_env.traffic_signals[ts_id]
+        current_phase = ts.green_phase
+
+        if action != current_phase and action != (current_phase + 1) % _NUM_PHASES:
+            action = (current_phase + 1) % _NUM_PHASES
+
         raw_obs, raw_reward, terminated, truncated, info = self._sumo_env.step(action)
 
         obs = self._transform_observation(raw_obs)
