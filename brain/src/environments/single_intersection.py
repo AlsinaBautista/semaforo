@@ -387,8 +387,11 @@ class SingleIntersectionEnv(gym.Env):
                 else 0.0
             )
             self._phase_elapsed = float(elapsed)
-            max_phase_dur = float(self._sumo_env.max_green + self._sumo_env.yellow_time)
-            obs[12] = np.clip(elapsed / max(max_phase_dur, 1.0), 0.0, 1.0)
+            # Normalise elapsed time by a fixed 120s window (not max_green
+            # which can be very large).  Values above 120s are clipped to 1.0,
+            # giving the network a clear signal of "this phase has been on
+            # for a long time".
+            obs[12] = np.clip(elapsed / 120.0, 0.0, 1.0)
 
             # Downstream (outgoing lane) occupancies — spillback visibility
             down_raw = np.array(
