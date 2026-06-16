@@ -41,6 +41,7 @@ from src.rewards.composite import CompositeReward
 from src.rewards.pressure import compute_pressure_reward
 from src.rewards.queue_length import compute_queue_reward
 from src.rewards.delay import compute_delay_reward
+from src.rewards.smart_delay import compute_smart_delay_reward
 from src.rewards.spillback import served_downstream_occupancies
 
 logger = logging.getLogger(__name__)
@@ -49,13 +50,14 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 _NUM_DIRECTIONS = 4  # N, S, E, W
-_NUM_PHASES = 4  # typical 4-phase signal plan
+_NUM_PHASES = 2  # N-S green / E-W green (verified from SUMO TLS)
 _OBS_SIZE = (
     _NUM_DIRECTIONS  # queue lengths
     + _NUM_DIRECTIONS  # densities
     + _NUM_PHASES  # one-hot current phase
     + 1  # normalised phase elapsed time
     + _NUM_DIRECTIONS  # downstream (outgoing lane) occupancies
+    + 1  # queue imbalance signal
 )
 
 _DEFAULT_NET = Path(__file__).resolve().parents[2] / "networks" / "single_intersection" / "single_intersection.net.xml"
@@ -92,7 +94,7 @@ class SingleIntersectionEnv(gym.Env):
         min_green: int = 5,
         max_green: int = 3600,
         yellow_time: int = 3,
-        reward_fn: str = "delay",
+        reward_fn: str = "smart_delay",
         num_seconds: int = 3600,
         seed: int | None = None,
     ) -> None:
@@ -162,7 +164,7 @@ class SingleIntersectionEnv(gym.Env):
         cls,
         *,
         use_gui: bool = False,
-        reward_fn: str = "delay",
+        reward_fn: str = "smart_delay",
         seed: int | None = None,
     ) -> "SingleIntersectionEnv":
         """Create an environment using the bundled single-intersection network.
@@ -309,9 +311,10 @@ class SingleIntersectionEnv(gym.Env):
 
             [queue_N, queue_E, queue_S, queue_W,            # 0-3
              density_N, density_E, density_S, density_W,    # 4-7
-             phase_0, phase_1, phase_2, phase_3,            # 8-11  (one-hot)
-             phase_elapsed_normalised,                      # 12
-             down_N, down_E, down_S, down_W]                # 13-16 (downstream occ)
+             phase_0_NS, phase_1_EW,                        # 8-9   (one-hot)
+             phase_elapsed_normalised,                      # 10
+             down_N, down_E, down_S, down_W,                # 11-14 (downstream occ)
+             queue_imbalance]                               # 15    (|NS-EW|/total)
 
         Bucket order is [N, E, S, W] — the per-lane arrays follow the
         junction's incLanes order (see Canonical17ObservationFunction in
@@ -378,7 +381,8 @@ class SingleIntersectionEnv(gym.Env):
             phase_oh = np.zeros(_NUM_PHASES, dtype=np.float32)
             phase_idx = int(current_phase) % _NUM_PHASES
             phase_oh[phase_idx] = 1.0
-            obs[8:12] = phase_oh
+            _phase_start = 2 * _NUM_DIRECTIONS  # = 8
+            obs[_phase_start:_phase_start + _NUM_PHASES] = phase_oh
 
             # Normalised elapsed time in current phase
             elapsed = (
@@ -391,15 +395,25 @@ class SingleIntersectionEnv(gym.Env):
             # which can be very large).  Values above 120s are clipped to 1.0,
             # giving the network a clear signal of "this phase has been on
             # for a long time".
-            obs[12] = np.clip(elapsed / 120.0, 0.0, 1.0)
+            _elapsed_idx = _phase_start + _NUM_PHASES  # = 10
+            obs[_elapsed_idx] = np.clip(elapsed / 120.0, 0.0, 1.0)
 
             # Downstream (outgoing lane) occupancies — spillback visibility
             down_raw = np.array(
                 [ts.get_out_lanes_density() if hasattr(ts, "get_out_lanes_density") else []],
                 dtype=np.float32,
             ).flatten()
-            obs[13:17] = self._aggregate_directions(down_raw, max_val=1.0)
+            _down_start = _elapsed_idx + 1  # = 11
+            obs[_down_start:_down_start + _NUM_DIRECTIONS] = self._aggregate_directions(down_raw, max_val=1.0)
             self._served_downstream = served_downstream_occupancies(ts)
+
+            # Queue imbalance: how much more traffic one axis has vs the other
+            # This gives the network a direct signal of "should I switch?"
+            q_ns = obs[0] + obs[2]  # North + South
+            q_ew = obs[1] + obs[3]  # East + West
+            imbalance = abs(q_ns - q_ew) / max(q_ns + q_ew, 0.01)
+            _imbalance_idx = _down_start + _NUM_DIRECTIONS  # = 15
+            obs[_imbalance_idx] = np.clip(imbalance, 0.0, 1.0)
         except Exception:  # noqa: BLE001
             self._served_downstream = None
             # Fallback: use the raw array normalised to [0, 1]
@@ -465,6 +479,10 @@ class SingleIntersectionEnv(gym.Env):
             ts_id = list(self._sumo_env.traffic_signals.keys())[0]
             ts = self._sumo_env.traffic_signals[ts_id]
             return compute_delay_reward(ts)
+        if self._reward_fn_name == "smart_delay":
+            ts_id = list(self._sumo_env.traffic_signals.keys())[0]
+            ts = self._sumo_env.traffic_signals[ts_id]
+            return compute_smart_delay_reward(ts, obs)
         if self._reward_fn_name == "composite":
             last = self._last_action if self._last_action is not None else action
             return self._composite_reward.compute(

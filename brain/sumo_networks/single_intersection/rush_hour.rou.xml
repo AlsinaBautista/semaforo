@@ -28,12 +28,10 @@
     <!-- ============================================================ -->
     
     <!-- Tráfico Masivo Norte-Sur -->
-    <flow id="morning_ns_th" type="passenger" route="ns_through" begin="0" end="1800" probability="0.30" departLane="best" departSpeed="max"/>
-    <flow id="morning_ns_l"  type="passenger" route="ns_left"    begin="0" end="1800" probability="0.05" departLane="best" departSpeed="max"/>
+    <flow id="morning_ns_th" type="passenger" route="ns_through" begin="0" end="1800" probability="0.35" departLane="best" departSpeed="max"/>
     <flow id="morning_ns_r"  type="passenger" route="ns_right"   begin="0" end="1800" probability="0.05" departLane="best" departSpeed="max"/>
     
-    <flow id="morning_sn_th" type="passenger" route="sn_through" begin="0" end="1800" probability="0.30" departLane="best" departSpeed="max"/>
-    <flow id="morning_sn_l"  type="passenger" route="sn_left"    begin="0" end="1800" probability="0.05" departLane="best" departSpeed="max"/>
+    <flow id="morning_sn_th" type="passenger" route="sn_through" begin="0" end="1800" probability="0.35" departLane="best" departSpeed="max"/>
     <flow id="morning_sn_r"  type="passenger" route="sn_right"   begin="0" end="1800" probability="0.05" departLane="best" departSpeed="max"/>
 
     <!-- Tráfico Muerto Este-Oeste -->
@@ -50,12 +48,10 @@
     <flow id="evening_sn_th" type="passenger" route="sn_through" begin="1800" end="3600" probability="0.02" departLane="best" departSpeed="max"/>
 
     <!-- Tráfico Masivo Este-Oeste -->
-    <flow id="evening_ew_th" type="passenger" route="ew_through" begin="1800" end="3600" probability="0.30" departLane="best" departSpeed="max"/>
-    <flow id="evening_ew_l"  type="passenger" route="ew_left"    begin="1800" end="3600" probability="0.05" departLane="best" departSpeed="max"/>
+    <flow id="evening_ew_th" type="passenger" route="ew_through" begin="1800" end="3600" probability="0.35" departLane="best" departSpeed="max"/>
     <flow id="evening_ew_r"  type="passenger" route="ew_right"   begin="1800" end="3600" probability="0.05" departLane="best" departSpeed="max"/>
     
-    <flow id="evening_we_th" type="passenger" route="we_through" begin="1800" end="3600" probability="0.30" departLane="best" departSpeed="max"/>
-    <flow id="evening_we_l"  type="passenger" route="we_left"    begin="1800" end="3600" probability="0.05" departLane="best" departSpeed="max"/>
+    <flow id="evening_we_th" type="passenger" route="we_through" begin="1800" end="3600" probability="0.35" departLane="best" departSpeed="max"/>
     <flow id="evening_we_r"  type="passenger" route="we_right"   begin="1800" end="3600" probability="0.05" departLane="best" departSpeed="max"/>
 
 </routes>
