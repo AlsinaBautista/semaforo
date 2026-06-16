@@ -89,9 +89,9 @@ class SingleIntersectionEnv(gym.Env):
         use_gui: bool = False,
         delta_time: int = 5,
         min_green: int = 5,
-        max_green: int = 60,
+        max_green: int = 120,
         yellow_time: int = 3,
-        reward_fn: str = "pressure",
+        reward_fn: str = "queue",
         num_seconds: int = 3600,
         seed: int | None = None,
     ) -> None:
@@ -161,7 +161,7 @@ class SingleIntersectionEnv(gym.Env):
         cls,
         *,
         use_gui: bool = False,
-        reward_fn: str = "pressure",
+        reward_fn: str = "queue",
         seed: int | None = None,
     ) -> "SingleIntersectionEnv":
         """Create an environment using the bundled single-intersection network.
