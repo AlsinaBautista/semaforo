@@ -40,6 +40,7 @@ except ImportError as exc:
 from src.rewards.composite import CompositeReward
 from src.rewards.pressure import compute_pressure_reward
 from src.rewards.queue_length import compute_queue_reward
+from src.rewards.delay import compute_delay_reward
 from src.rewards.spillback import served_downstream_occupancies
 
 logger = logging.getLogger(__name__)
@@ -89,9 +90,9 @@ class SingleIntersectionEnv(gym.Env):
         use_gui: bool = False,
         delta_time: int = 5,
         min_green: int = 5,
-        max_green: int = 120,
+        max_green: int = 3600,
         yellow_time: int = 3,
-        reward_fn: str = "queue",
+        reward_fn: str = "delay",
         num_seconds: int = 3600,
         seed: int | None = None,
     ) -> None:
@@ -161,7 +162,7 @@ class SingleIntersectionEnv(gym.Env):
         cls,
         *,
         use_gui: bool = False,
-        reward_fn: str = "queue",
+        reward_fn: str = "delay",
         seed: int | None = None,
     ) -> "SingleIntersectionEnv":
         """Create an environment using the bundled single-intersection network.
@@ -457,6 +458,10 @@ class SingleIntersectionEnv(gym.Env):
             return compute_pressure_reward(obs)
         if self._reward_fn_name == "queue":
             return compute_queue_reward(obs)
+        if self._reward_fn_name == "delay":
+            ts_id = list(self._sumo_env.traffic_signals.keys())[0]
+            ts = self._sumo_env.traffic_signals[ts_id]
+            return compute_delay_reward(ts)
         if self._reward_fn_name == "composite":
             last = self._last_action if self._last_action is not None else action
             return self._composite_reward.compute(
