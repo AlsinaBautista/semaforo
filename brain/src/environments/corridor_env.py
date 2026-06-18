@@ -144,6 +144,7 @@ class CorridorVecEnv(VecEnv):
                 global_done = True
 
         if global_done:
+            dones = np.ones(self._num_envs, dtype=bool)
             obs_array = self.reset()
 
         return obs_array, rewards, dones, info_list
