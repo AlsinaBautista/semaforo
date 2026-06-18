@@ -39,16 +39,18 @@ class CorridorGymWrapper(gym.Env):
         # Action space: 3 agents, each has 2 actions
         self.action_space = gym.spaces.MultiDiscrete([2, 2, 2])
         
-    def reset(self):
-        return self.venv.reset()
+    def reset(self, *, seed=None, options=None):
+        # We ignore seed/options for the underlying sumo-rl env for now as it's already instantiated
+        obs = self.venv.reset()
+        return obs, {}
         
     def step(self, action):
         self.venv.step_async(action)
         obs, rewards, dones, infos = self.venv.step_wait()
         # SubprocVecEnv expects a single done boolean
         global_done = bool(np.all(dones))
-        # Pack the infos into a single dict
-        return obs, rewards, global_done, {"agents_info": infos}
+        # Return 5 values for gymnasium: obs, reward, terminated, truncated, info
+        return obs, rewards, global_done, False, {"agents_info": infos}
         
     def close(self):
         self.venv.close()
