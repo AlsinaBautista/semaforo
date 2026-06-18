@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import gym
+import gymnasium as gym
 
 # Ensure the project root is on sys.path for imports.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
