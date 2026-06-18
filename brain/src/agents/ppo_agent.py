@@ -163,14 +163,14 @@ class PPOTrafficAgent:
         self._model = PPO.load(str(model_path))
         return self._model
 
-    def decide(self, obs: np.ndarray) -> int:
+    def decide(self, obs: np.ndarray) -> int | np.ndarray:
         """Select an action given an observation (inference mode).
 
         Args:
             obs: Current environment observation vector.
 
         Returns:
-            Discrete action index.
+            Discrete action index, or an array of actions if vectorized.
 
         Raises:
             RuntimeError: If no model has been trained or loaded.
@@ -178,4 +178,8 @@ class PPOTrafficAgent:
         if self._model is None:
             raise RuntimeError("No model loaded. Call train() or load() first.")
         action, _ = self._model.predict(obs, deterministic=True)
+        
+        if isinstance(action, np.ndarray) and action.ndim > 0:
+            return action.astype(int)
+            
         return int(action)
