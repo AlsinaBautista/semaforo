@@ -66,6 +66,11 @@ def parse_args() -> argparse.Namespace:
         default=5,
         help="Decision interval in simulation seconds (default: 5).",
     )
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Run SUMO with GUI to visualize the simulation.",
+    )
     return parser.parse_args()
 
 
@@ -114,14 +119,34 @@ def main() -> None:
         net_file=args.net_file,
         route_file=args.route_file,
         delta_time=args.delta_time,
-        use_gui=False,
+        use_gui=args.gui,
     )
 
     # --- PPO agent ---------------------------------------------------------
     print(f"\nEvaluating PPO model: {args.model_path}")
     agent = PPOTrafficAgent()
     agent.load(args.model_path)
-    ppo_metrics = agent.evaluate(env, n_episodes=args.episodes)
+    
+    # Custom evaluation loop to slow down the GUI
+    import time
+    ppo_rewards = []
+    for ep in range(args.episodes):
+        obs, _ = env.reset()
+        total_reward = 0.0
+        done = False
+        while not done:
+            action = agent.decide(obs)
+            obs, reward, terminated, truncated, _ = env.step(action)
+            total_reward += reward
+            done = terminated or truncated
+            if args.gui:
+                time.sleep(0.1)  # Artificial delay so the user can see it!
+        ppo_rewards.append(total_reward)
+    
+    ppo_metrics = {
+        "mean_reward": float(np.mean(ppo_rewards)),
+        "std_reward": float(np.std(ppo_rewards)),
+    }
 
     # --- Fixed-time baseline -----------------------------------------------
     print("Evaluating fixed-time baseline …")
