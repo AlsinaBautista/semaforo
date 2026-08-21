@@ -171,3 +171,15 @@ logs/
 # Datasets (Large Files)
 # -----------------------------------------------------------------------------
 datasets/
+
+# -----------------------------------------------------------------------------
+# YOLO / vision pipeline outputs — regenerable, and the videos blow past
+# GitHub's 100 MB per-file hard limit
+# -----------------------------------------------------------------------------
+*.mp4
+*.avi
+*.mkv
+*_tracks.json
+/test_*.rou.xml
+pilot_shadow.jsonl
+*.jsonl
