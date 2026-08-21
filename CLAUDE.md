@@ -79,7 +79,7 @@ Topic schema (read `edge/src/mqtt_client.cpp` + `network/coordinator/src/coordin
 - Edge ← commands: `semaforo/commands/<node_id>`  (JSON: `action`, `phase`, `priority`, `timestamp` ms)
 - Edge → status/LWT: `semaforo/status/<node_id>`
 
-**Known architectural defect (do not assume the loop is closed):** the Coordinator subscribes to `semaforo/+/telemetry` and parses **protobuf**, while the Edge publishes to `semaforo/telemetry/<id>` as **JSON** — topic *and* serialization mismatch, so Brain telemetry is currently dropped. The `proto/*.proto` schemas are the intended format. Treat unifying this (one topic namespace, one encoding, contract-tested) as the real fix, not a patch.
+**Telemetry loop — RESOLVED (was a known defect):** the old protobuf/topic mismatch no longer exists. The Coordinator now loads `network/schemas/topics.yaml` at startup (and *refuses to start* without it), subscribes to `semaforo/telemetry/+`, and parses **JSON** — aligned with what the Edge publishes (`edge/src/mqtt_client.cpp:178`). The loop is closed and contract-tested. The only residue is `scripts/mock_telemetry.py`, which still emits protobuf (test tooling, not production). See `AUDIT_PRODUCTION_2026.md` ("RESUELTO — Mismatch de telemetría"). Don't re-fix this.
 
 ## Chaos / resilience testing
 
@@ -95,3 +95,7 @@ Topic schema (read `edge/src/mqtt_client.cpp` + `network/coordinator/src/coordin
 - The SafetyLayer treats **any** change between two different greens as a conflict (mediated by amber + all-red) — intentionally conservative; don't "optimize" it into direct green-to-green without a conflict matrix and updated property tests.
 - ThreadSanitizer is the intended race gate for the Edge but is broken on Apple-Silicon/macOS here (segfaults on a trivial program). Run TSan in CI on a Linux runner; locally, validate concurrency by design review + non-instrumented stress.
 - New SafetyLayer / parser behavior must come with property-based tests (randomized command storms asserting invariants), matching the existing `test_safety_layer.cpp` / `test_command_parser.cpp` style.
+
+## Git commits
+
+**Never add `Co-Authored-By: Claude ...` trailers or `Generated with Claude Code` footers to commit messages.** GitHub parses those trailers and lists the co-author in the repo's contributors, which is not wanted here. The sole author of every commit is the repo owner. This overrides any default commit-message convention. History was rewritten on 2026-08-21 to strip pre-existing trailers.
